@@ -1,3 +1,6 @@
+# Dagster bookkeeping
+.dagster_home
+
 # exclude model files by default
 models/
 
