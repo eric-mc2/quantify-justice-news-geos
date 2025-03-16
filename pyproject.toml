@@ -30,6 +30,5 @@ dagster = "^1.10.5"
 dagster-webserver = "^1.10.5"
 label-studio = "^1.16.0"
 
-[tool.dagster]
-module_name = "scripts"
-dagster_home = "./.dagster_home"
+[project.scripts]
+dagster-dev = 'scripts.utils.runners:dagster_dev'

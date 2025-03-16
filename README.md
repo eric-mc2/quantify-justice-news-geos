@@ -21,8 +21,11 @@ Geo-extracting crime locations mentioned in news articles.
 
 To run a dagster DAG:
 > mkdir -p ./.dagster_home
+Set env and run cmd:
 > export DAGSTER_HOME=$(pwd)/.dagster_home
 > poetry run dagster dev
+OR we can alias those two steps together in poetry (pyproject.toml `project.scripts` section):
+> poetry run dagster-dev
 
 To label data:
 > poetry run label-studio

@@ -1,2 +1,11 @@
-relevance:
+art_relevance:
+  base_cfg: "scripts/art_relevance/spacy_base_config.cfg"
+  full_cfg: "scripts/art_relevance/spacy_config.cfg"
+  trained_model: "models/art_relevance/"
+  base_model: "en_core_web_sm"
+
+sent_relevance:
   base_model: "en_core_web_md"
+
+dagster:
+  dagster_home: ".dagster_home"

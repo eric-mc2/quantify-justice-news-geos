@@ -1,9 +1,16 @@
 import subprocess
 import time
+import dagster as dg
+import pandas as pd
+import os
+import sys
+from scripts.utils.config import Config
 
-def cmd(command: list[str], time_fmt=None):
+def cmd(command: list[str], time_fmt=None, env=None):
     start = time.time()
-    process = subprocess.Popen(command, shell=False,
+    process = subprocess.Popen(command, 
+                               shell=False, 
+                               env=env,
                                stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT,
                                text=True,
@@ -14,4 +21,24 @@ def cmd(command: list[str], time_fmt=None):
     process.wait()
     end = time.time()
 
-    print(time_fmt.format(end - start))
+    if time_fmt:
+        print(time_fmt.format(end - start))
+
+def _obj_dtype(values: pd.Series):
+    return values.apply(type).value_counts().idxmax().__name__
+
+def dg_table_schema(df):
+    columns = []
+    for col, dt in df.dtypes.items():
+        if dt.name == 'object':
+            dt_name = _obj_dtype(df[col])
+        else:
+            dt_name = dt.name
+        columns.append(dg.TableColumn(col, dt_name))
+    return dg.TableSchema(columns=columns)
+
+def dagster_dev():
+    env = os.environ.copy()
+    env["DAGSTER_HOME"] = Config().get_file_path("dagster.dagster_home")
+    args = sys.argv[1:]
+    cmd("dagster dev".split(" " ) + args, env=env)

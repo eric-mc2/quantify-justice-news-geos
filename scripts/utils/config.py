@@ -31,6 +31,11 @@ class Config:
             os.makedirs(dir_path, exist_ok=True)
         return data_path
     
+    def get_file_path(self, file_key: str):
+        basepath = self._get_value_reduce(file_key)
+        file_path = os.path.join(self._LOCAL_PROJECT_DIR, basepath)
+        return file_path
+    
     def get_param(self, key: str):
         return self._get_value_reduce(key)
 
