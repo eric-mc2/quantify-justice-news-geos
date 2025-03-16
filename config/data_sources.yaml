@@ -1,0 +1,16 @@
+raw:
+  zip: "raw/cjp_tables_old.zip"
+  article_text: "raw/newsarticles_article.parquet"
+
+pre_relevance:
+  article_text: "pre_relevance/articles.parquet"
+
+relevance:
+  article_text_prototype: "relevance/articles_prototype.parquet"
+  # This is JSON because Label-Studio doesn't accept jsonl!
+  article_text_preproc: "relevance/articles_preproc.json"
+  article_text_labeled: "relevance/articles_labeled.jsonl"
+  article_text_train: "relevance/articles_train.jsonl"
+  article_text_dev: "relevance/articles_dev.jsonl"
+  article_text_test: "relevance/articles_test.jsonl"
+  
