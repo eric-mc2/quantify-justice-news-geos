@@ -1,0 +1,35 @@
+[project]
+name = "qjn-neighborhoods"
+version = "0.1.0"
+authors = [
+    {name = "Eric Chandler", email = "echandle@alumni.cmu.edu"}
+]
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+packages = [
+    {include = "scripts"}
+]
+
+[tool.poetry.dependencies]
+spacy = "^3.8.4"
+optuna = "^4.2.1"
+pandas = "^2.2.3"
+pyarrow = "^19.0.1"
+tqdm = "^4.67.1"
+geopandas = "^1.0.1"
+shapely = "^2.0.7"
+ipykernel = "^6.29.5"
+textacy = "^0.13.0"
+dagster = "^1.10.5"
+dagster-webserver = "^1.10.5"
+label-studio = "^1.16.0"
+
+[tool.dagster]
+module_name = "scripts"
+dagster_home = "./.dagster_home"
