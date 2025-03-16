@@ -12,40 +12,7 @@ import spacy
 import dagster as dg
 from dagster import get_dagster_logger
 
-
-@dg.asset
-def extract():
-    config = Config()
-    dep_path = config.get_data_path("raw.zip")
-    out_path = config.get_data_path("raw.article_text")
-
-    with ZipFile(dep_path, 'r') as zf:
-        with zf.open("cjp_tables/newsarticles_article.csv.gz", "r") as zzf:
-            with gzip.open(zzf) as zzzf:
-                article_data_chunks = pd.read_csv(zzzf,
-                        names=['id','feedname','url','orig_html','title','bodytext',
-                                'relevant','created','last_modified','news_source_id', 'author'],
-                            true_values=['t'], false_values=['f'],
-                            iterator=True, chunksize=1000)
-                writer = None
-                for chunk in article_data_chunks:
-                    chunk = chunk.filter(['id','title','bodytext','relevant'])
-                    table = pa.Table.from_pandas(chunk)
-                    if writer is None:
-                        writer = pq.ParquetWriter(out_path, table.schema)
-                    writer.write_table(table)
-                writer.close()
-
-@dg.asset(deps=[extract])
-def news_relevant():
-    config = Config()
-    dep_path = config.get_data_path("raw.article_text")
-    out_path = config.get_data_path("pre_relevance.article_text")
-    article_data = pd.read_parquet(dep_path)
-    filtered_articles = article_data[article_data.relevant].drop(columns='relevant')
-    filtered_articles.to_parquet(out_path)
-
-@dg.asset(deps=[news_relevant])
+@dg.asset(deps=["art_relevant_predict"])
 def prototype_sample():
     config = Config()
     dep_path = config.get_data_path("pre_relevance.article_text")
@@ -106,7 +73,7 @@ def split():
     test_path = config.get_data_path("relevance.article_text_test")
 
     logger.debug("Splitting text.")
-    article_data = pd.read_json(dep_path, lines=True, orient="records")
+    article_data = pd.read_json(dep_path, orient="records")
     train, dev, test = pre.split_train_dev_test(article_data)
     del article_data
 
@@ -118,9 +85,7 @@ def split():
     return ("relevance_article_text_train","relevance_article_text_dev","relevance_article_text_test")
 
 
-defs = dg.Definitions(assets=[extract, 
-                              news_relevant,
-                              prototype_sample,
+defs = dg.Definitions(assets=[prototype_sample,
                               preprocess,
                               annotate,
                               split])

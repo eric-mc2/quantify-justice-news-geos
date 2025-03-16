@@ -1,6 +1,5 @@
 import pandas as pd
 from textacy import preprocessing as tp
-from spacy.tokens import DocBin
 
 def split_train_dev_test(data: pd.DataFrame, 
                          train_path: str = None, 

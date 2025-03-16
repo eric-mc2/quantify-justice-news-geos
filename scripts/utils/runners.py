@@ -4,9 +4,13 @@ import dagster as dg
 import pandas as pd
 import os
 import sys
+import re
 from scripts.utils.config import Config
 
-def cmd(command: list[str], time_fmt=None, env=None):
+def cmd(command: str | list[str], time_fmt=None, env=None):
+    if isinstance(command, str):
+        command = re.sub(r"\s+", " ", command).split(" ")
+    
     start = time.time()
     process = subprocess.Popen(command, 
                                shell=False, 
