@@ -40,9 +40,6 @@ discardT([discard])
 style RELA fill:#FFF,stroke-width:4px,stroke:#000,stroke-dasharray:2 2
 subgraph RELA[Relevance Model]
     CrimeA@{ shape: diamond, label: "Crime-related article?" }
-    NOTE@{ shape: braces, label: "Happens in separate module.
-                                This project pipeline is conditional 
-                                on article-level relevance." }
 end
 
 text --> CrimeA
@@ -104,7 +101,7 @@ SL --> label
 
 ```
 
-# Project Structure
+<!-- # Project Structure
 
 ```
 project/
@@ -193,4 +190,4 @@ project/
 ├── dagster.yaml (Dagster configuration)
 ├── README.md
 ```
-
+ -->
