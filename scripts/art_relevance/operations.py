@@ -4,7 +4,7 @@ import gzip
 import pandas as pd
 import pyarrow.parquet as pq
 import pyarrow as pa
-import re
+from typing import Any
 from scripts.utils import preprocessing as pre
 from scripts.utils.runners import cmd
 import logging
@@ -101,12 +101,14 @@ def split(dep_path, train_path, dev_path, test_path):
     to_docbin(dev, dev_path)
     to_docbin(test, test_path)
 
-def train(train_path, dev_path, base_cfg, full_cfg, model_path):
+def init_config(base_cfg, full_cfg):
     command = f"python -m spacy init fill-config {base_cfg} {full_cfg}"
     cmd(command)
 
+def train(train_path, dev_path, full_cfg, model_path, overrides: dict[str,Any] = {}):
     command = f"""python -m spacy train {full_cfg}
                 --paths.train {train_path} --paths.dev {dev_path}
-                --output {model_path}
-                --verbose"""
+                --output {model_path}"""
+    for key,val in overrides.items():
+        command += f" --{key} {val}"
     cmd(command, "Training time: {:.1f}s")

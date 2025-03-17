@@ -74,7 +74,8 @@ def train():
     base_cfg = config.get_param("art_relevance.base_cfg")
     full_cfg = config.get_param("art_relevance.full_cfg")
     out_path = config.get_param("art_relevance.trained_model")
-    ops.train(train_path, dev_path, base_cfg, full_cfg, out_path)
+    ops.init_config(base_cfg, full_cfg)
+    ops.train(train_path, dev_path, full_cfg, out_path)
 
 
 defs = dg.Definitions(assets=[extract, 

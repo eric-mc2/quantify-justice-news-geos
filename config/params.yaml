@@ -3,6 +3,7 @@ art_relevance:
   full_cfg: "scripts/art_relevance/spacy_config.cfg"
   trained_model: "models/art_relevance/"
   base_model: "en_core_web_sm"
+  optuna_db: "sqlite:///optuna.sqlite3"
 
 sent_relevance:
   base_model: "en_core_web_md"

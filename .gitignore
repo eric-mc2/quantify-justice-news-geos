@@ -1,3 +1,7 @@
+# MLFlow bookkeeping
+mlartifacts/
+mlruns/
+
 # Dagster bookkeeping
 .dagster_home
 

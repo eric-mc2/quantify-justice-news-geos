@@ -17,7 +17,7 @@ Geo-extracting crime locations mentioned in news articles.
 4. Let poetry pick its dependencies: `poetry add pkg1 pkg2 ...`
 5. Add kernel to jupyter: `poetry run python -m ipykernel install --user --name=qjn --display-name "Python (qjn)"
 
-# Pipeline
+# Run Pipeline
 
 To run a dagster DAG:
 > mkdir -p ./.dagster_home
@@ -29,6 +29,13 @@ OR we can alias those two steps together in poetry (pyproject.toml `project.scri
 
 To label data:
 > poetry run label-studio
+
+Setup MLFlow:
+> poetry run mlflow server --host 127.0.0.1 --port 8080 --no-serve-artifacts
+
+Clean up deleted MLFlow experiments:
+> poetry run mlflow gc
+
 
 # Modules
 
