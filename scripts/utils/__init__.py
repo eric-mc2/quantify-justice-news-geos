@@ -1,5 +1,6 @@
 import spacy
 from typing import Any
+from scripts.utils.config import _deep_union
 
 def load_spacy(model, **kwargs):
     try:
@@ -18,3 +19,13 @@ def flatten_config(cfg: dict[str, Any], parent: str = ""):
         else:
             flat[flat_key] = val
     return flat
+
+def nest_config(flat: dict[str, Any]):
+    cfg = {}
+    for key, val in flat.items():
+        nodes = key.split('.')
+        leaf = val
+        for node in reversed(nodes):
+            leaf = {node: leaf}
+        cfg = _deep_union(cfg, leaf)
+    return cfg

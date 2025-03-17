@@ -82,6 +82,7 @@ def split(dep_path, train_path, dev_path, test_path):
 
     logger.debug("Splitting text.")
     article_data = pd.read_json(dep_path, lines=True, orient="records")
+    all_labels = article_data['label'].unique()
     train, dev, test = pre.split_train_dev_test(article_data)
     del article_data
 
@@ -92,7 +93,8 @@ def split(dep_path, train_path, dev_path, test_path):
         meta = df.drop(columns='title')
         data_tuples = ((t,m) for t,m in zip(text, meta.itertuples()))
         for doc, eg in nlp.pipe(data_tuples, as_tuples=True):
-            doc.cats[eg.label] = 1
+            for label in all_labels:
+                doc.cats[label] = 1 if eg.label == label else 0
             doc_bin.add(doc)
         doc_bin.to_disk(out_path)
     
