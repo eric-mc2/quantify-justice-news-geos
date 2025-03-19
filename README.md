@@ -15,7 +15,7 @@ Geo-extracting crime locations mentioned in news articles.
 -  Make poetry create a local venv instead of putting it in /Library/cache (seems optional but this might be what made vscode finally work):
 - `poetry config virtualenvs.in-project true`
 4. Let poetry pick its dependencies: `poetry add pkg1 pkg2 ...`
-5. Add kernel to jupyter: `poetry run python -m ipykernel install --user --name=qjn --display-name "Python (qjn)"
+5. Add kernel to jupyter: `poetry run python -m ipykernel install --user --name=qjn --display-name "Python (qjn)"`
 
 # Run Pipeline
 

@@ -7,9 +7,12 @@ import pyarrow as pa
 from typing import Any
 from scripts.utils import preprocessing as pre
 from scripts.utils.runners import cmd
+from spacy.cli import apply as spacy_apply
 import logging
 import spacy
+from pathlib import Path
 from spacy.tokens import DocBin
+from tempfile import NamedTemporaryFile
 
 def extract(dep_path, out_path):
     with ZipFile(dep_path, 'r') as zf:
@@ -34,20 +37,20 @@ def news_relevant(dep_path, out_path):
     filtered_articles = article_data[article_data.relevant].drop(columns='relevant')
     filtered_articles.to_parquet(out_path)
 
-def prototype_sample(dep_path, out_path):
+def prototype_sample(dep_path, out_path=None, k=200, seed=31825):
     data = pd.read_parquet(dep_path)
-    proto = data.sample(200, random_state=31525)
-    proto.to_parquet(out_path)
+    proto = data.sample(k, random_state=seed)
+    if out_path:
+        proto.to_parquet(out_path)
     return proto
     
 def preprocess(dep_path, out_path):
     logger = logging.getLogger(__name__)
-
     article_data = pd.read_parquet(dep_path, columns=['id','title'])
     logger.debug("Normalizing text.")
     article_data = pre.normalize(article_data, "title")
-
-    article_data.to_json(out_path, orient='records', index=False, force_ascii=True)
+    if out_path:
+        article_data.to_json(out_path, orient='records', index=False, force_ascii=True)
     return article_data
 
 def annotate(deps_path, out_path):
@@ -86,7 +89,7 @@ def split(dep_path, train_path, dev_path, test_path):
     train, dev, test = pre.split_train_dev_test(article_data)
     del article_data
 
-    def to_docbin(df, out_path):
+    def _to_docbin(df, out_path):
         nlp = spacy.blank("en")
         doc_bin = DocBin()
         text = df['title']
@@ -97,11 +100,11 @@ def split(dep_path, train_path, dev_path, test_path):
                 doc.cats[label] = 1 if eg.label == label else 0
             doc_bin.add(doc)
         doc_bin.to_disk(out_path)
-    
+
     logger.debug("Writing text.")
-    to_docbin(train, train_path)
-    to_docbin(dev, dev_path)
-    to_docbin(test, test_path)
+    _to_docbin(train, train_path)
+    _to_docbin(dev, dev_path)
+    _to_docbin(test, test_path)
 
 def init_config(base_cfg, full_cfg):
     command = f"python -m spacy init fill-config {base_cfg} {full_cfg}"
@@ -114,3 +117,20 @@ def train(train_path, dev_path, full_cfg, model_path, overrides: dict[str,Any] =
     for key,val in overrides.items():
         command += f" --{key} {val}"
     cmd(command, "Training time: {:.1f}s")
+
+def filter(model_path, in_data_path, out_data_path):
+    with NamedTemporaryFile("wb") as f:
+        df_orig = prototype_sample(in_data_path, f.name, 600, 31925)
+        f.seek(0)
+        df_prep = preprocess(f.name, None)
+    
+    nlp = spacy.load(model_path)
+    data_tuples = ((t,m) for t,m in zip(df_prep['title'], df_prep['id']))
+    labels = {}
+    for doc, idx in nlp.pipe(data_tuples, as_tuples=True):
+        labels[idx] = doc.cats['CRIME'] > doc.cats['IRRELEVANT']
+    
+    relevant = df_orig['id'].replace(labels)
+    df_orig = df_orig.loc[relevant]
+    df_orig.to_parquet(out_data_path)
+    return df_orig
