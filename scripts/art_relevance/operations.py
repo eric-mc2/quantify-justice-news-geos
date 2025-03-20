@@ -90,19 +90,16 @@ def train(base_cfg, full_cfg, train_path, dev_path, out_path, overrides=None):
     metrics = load_metrics(out_path)
     return metrics
 
-def filter(model_path, in_data_path, out_data_path):
+def filter(model_path, in_data_path, out_data_path, k, seed):
     with NamedTemporaryFile("wb") as f:
-        df_orig = prototype_sample(in_data_path, f.name, 600, 31925)
+        df_orig = prototype_sample(in_data_path, f.name, k, seed)
         f.seek(0)
         df_prep = preprocess(f.name, None)
     
     nlp = spacy.load(model_path)
-    data_tuples = ((t,m) for t,m in zip(df_prep['title'], df_prep['id']))
-    labels = {}
-    for doc, idx in nlp.pipe(data_tuples, as_tuples=True):
-        labels[idx] = doc.cats['CRIME'] > doc.cats['IRRELEVANT']
-    
-    relevant = df_orig['id'].replace(labels)
-    df_orig = df_orig.loc[relevant]
-    df_orig.to_parquet(out_data_path)
-    return df_orig
+    labels = [doc.cats['CRIME'] > doc.cats['IRRELEVANT']
+                for doc in nlp.pipe(df_prep['title'])]
+    relevant = pd.Series(labels, df_prep.index)
+    result = df_orig[relevant]
+    result.to_parquet(out_data_path)
+    return result

@@ -88,9 +88,10 @@ def train():
 def filter():
     in_data_path = config.get_data_path("pre_relevance.article_text_filtered")
     out_data_path = config.get_data_path("art_relevance.article_text_filtered")
-    model_path = config.get_param("art_relevance.trained_model")
+    model_path = config.get_file_path("art_relevance.trained_model")
+    seed = config.get_param("art_relevance.proto_seed")
     best_model_path = os.path.join(model_path, "model-best")
-    df = ops.filter(best_model_path, in_data_path, out_data_path)
+    df = ops.filter(best_model_path, in_data_path, out_data_path, 600, seed)
     return dg.MaterializeResult(metadata={
         "dagster/column_schema": dg_table_schema(df),
         "dagster/row_count": len(df),

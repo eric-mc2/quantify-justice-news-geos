@@ -4,6 +4,7 @@ art_relevance:
   base_model: "en_core_web_sm"
   trained_model: "models/art_relevance/"
   optuna_db: "sqlite:///optuna.sqlite3"
+  proto_seed: 31925
 
 sent_relevance:
   base_cfg: "scripts/sent_relevance/spacy_base_config.cfg"
@@ -11,6 +12,7 @@ sent_relevance:
   base_model: "en_core_web_sm"
   trained_model: "models/sent_relevance/"
   optuna_db: "sqlite:///optuna.sqlite3"
+  proto_seed: 32025
 
 dagster:
   dagster_home: ".dagster_home"

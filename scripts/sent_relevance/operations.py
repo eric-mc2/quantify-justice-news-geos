@@ -1,6 +1,10 @@
 import pandas as pd
-import spacy 
 import logging
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+import spacy 
+from spacy.cli import apply
 from spacy.tokens import DocBin
 
 from scripts.utils import preprocessing as pre
@@ -9,6 +13,7 @@ from scripts.utils.spacy import (load_spacy,
                                  load_metrics,
                                  train as train_spacy)
 from scripts.utils.labelstudio import extract as extract_ls
+from scripts.art_relevance.operations import filter as art_filter
 
 # TODO: move basic config to top-level definitions
 logging.basicConfig(
@@ -54,6 +59,18 @@ def annotate(deps_path, out_path):
     data.to_json(out_path, lines=True, orient="records", index=False)
     return data
 
+def _to_docbin(df, all_labels, out_path):
+    nlp = spacy.blank("en")
+    doc_bin = DocBin()
+    text = df['sentence']
+    meta = df.drop(columns='sentence')
+    data_tuples = ((t,m) for t,m in zip(text, meta.itertuples()))
+    for doc, eg in nlp.pipe(data_tuples, as_tuples=True):
+        for label in all_labels:
+            doc.cats[label] = 1 if label in eg.multilabel else 0
+        doc_bin.add(doc)
+    doc_bin.to_disk(out_path)
+
 def split(dep_path, train_path, dev_path, test_path):    
     logger.debug("Splitting text.")
     article_data = pd.read_json(dep_path, lines=True, orient="records")
@@ -61,25 +78,39 @@ def split(dep_path, train_path, dev_path, test_path):
     train, dev, test = pre.split_train_dev_test(article_data)
     del article_data
 
-    def _to_docbin(df, out_path):
-        nlp = spacy.blank("en")
-        doc_bin = DocBin()
-        text = df['sentence']
-        meta = df.drop(columns='sentence')
-        data_tuples = ((t,m) for t,m in zip(text, meta.itertuples()))
-        for doc, eg in nlp.pipe(data_tuples, as_tuples=True):
-            for label in all_labels:
-                doc.cats[label] = 1 if label in eg.multilabel else 0
-            doc_bin.add(doc)
-        doc_bin.to_disk(out_path)
-    
     logger.debug("Writing text.")
-    _to_docbin(train, train_path)
-    _to_docbin(dev, dev_path)
-    _to_docbin(test, test_path)
+    _to_docbin(train, all_labels, train_path)
+    _to_docbin(dev, all_labels, dev_path)
+    _to_docbin(test, all_labels, test_path)
 
 def train(base_cfg, full_cfg, train_path, dev_path, out_path, overrides=None):
     init_config(base_cfg, full_cfg)
     train_spacy(train_path, dev_path, full_cfg, out_path, overrides)
     metrics = load_metrics(out_path)
     return metrics
+
+def filter(art_model, sent_model, seed, in_data_path, out_data_path):
+    with (NamedTemporaryFile("wb", suffix=".parquet") as f1,
+          NamedTemporaryFile("wb", suffix=".json") as f2):
+        art_filter(art_model, in_data_path, f1.name, 600, seed)
+        f1.seek(0)
+        df_orig = preprocess(f1.name, sent_model, f2.name)
+
+    nlp = spacy.load(sent_model)
+    with (NamedTemporaryFile("wb", suffix=".spacy") as f1,
+        NamedTemporaryFile("wb", suffix=".spacy") as f2):
+        _to_docbin(df_orig, [], f1.name)
+        f1.seek(0)
+        apply(data_path=Path(f1.name), 
+            output_file=Path(f2.name), 
+            model=sent_model, 
+            json_field="text", 
+            batch_size=1,
+            n_process=1)
+        f2.seek(0)
+        docs = DocBin().from_disk(f2.name).get_docs(nlp.vocab)
+    relevant = [any(map(lambda x: x[0] != 'IRRELEVANT' and x[1]>.5, d.cats.items())) for d in docs]
+    relevant = pd.Series(relevant, index=df_orig.index)
+    result = df_orig[relevant]
+    result.to_parquet(out_data_path)
+    return result

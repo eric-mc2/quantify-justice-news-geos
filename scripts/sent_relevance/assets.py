@@ -1,5 +1,6 @@
 from functools import partial
 import dagster as dg
+import os
 
 from scripts.utils.config import Config
 from scripts.sent_relevance import operations as ops
@@ -67,8 +68,26 @@ def train():
     metrics = ops.train(base_cfg, full_cfg, train_path, dev_path, out_path)
     return dg.MaterializeResult(metadata=metrics)
 
+@dg_asset(deps=[preprocess, train], 
+          description="Pass original data through ml model")
+def filter():
+    in_data_path = config.get_data_path("pre_relevance.article_text_filtered")
+    out_data_path = config.get_data_path("sent_relevance.article_text_filtered")
+    seed = config.get_param("sent_relevance.proto_seed")
+    art_model_path = config.get_file_path("art_relevance.trained_model")
+    art_model_path = os.path.join(art_model_path, "model-best")
+    sent_model_path = config.get_file_path("sent_relevance.trained_model")
+    sent_model_path = os.path.join(sent_model_path, "model-best")
+    df = ops.filter(art_model_path, sent_model_path, seed, in_data_path, out_data_path)
+    
+    return dg.MaterializeResult(metadata={
+        "dagster/column_schema": dg_table_schema(df),
+        "dagster/row_count": len(df),
+    })
+
 defs = dg.Definitions(assets=[preprocess,
                               annotate,
                               split,
-                              train])
+                              train,
+                              filter])
 

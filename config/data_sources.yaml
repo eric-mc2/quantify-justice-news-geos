@@ -25,4 +25,5 @@ sent_relevance:
   article_text_train: "sent_relevance/articles_train.spacy"
   article_text_dev: "sent_relevance/articles_dev.spacy"
   article_text_test: "sent_relevance/articles_test.spacy"
+  article_text_filtered: "sent_relevance/articles_filtered.parquet"
   
