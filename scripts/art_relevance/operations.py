@@ -4,15 +4,18 @@ import gzip
 import pandas as pd
 import pyarrow.parquet as pq
 import pyarrow as pa
-from typing import Any
-from scripts.utils import preprocessing as pre
-from scripts.utils.runners import cmd
-from spacy.cli import apply as spacy_apply
 import logging
 import spacy
-from pathlib import Path
 from spacy.tokens import DocBin
 from tempfile import NamedTemporaryFile
+
+from scripts.utils import preprocessing as pre
+from scripts.utils.labelstudio import extract as extract_ls
+from scripts.utils.spacy import (init_config, train as train_spacy, load_metrics)
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 def extract(dep_path, out_path):
     with ZipFile(dep_path, 'r') as zf:
@@ -45,7 +48,6 @@ def prototype_sample(dep_path, out_path=None, k=200, seed=31825):
     return proto
     
 def preprocess(dep_path, out_path):
-    logger = logging.getLogger(__name__)
     article_data = pd.read_parquet(dep_path, columns=['id','title'])
     logger.debug("Normalizing text.")
     article_data = pre.normalize(article_data, "title")
@@ -54,35 +56,11 @@ def preprocess(dep_path, out_path):
     return article_data
 
 def annotate(deps_path, out_path):
-    data = pd.read_json(deps_path)
-
-    cols = ['data','annotations','file_upload','created_at','updated_at','total_annotations','cancelled_annotations']
-    data = data.filter(cols)
-
-    # Annotations is a list so unpack it.
-    data = data.explode('annotations')
-
-    # Recover original data
-    data_input = data['data'].apply(pd.Series)
-
-    # Parse out the actual label. Discard other label provenance metadata.
-    data_annot = data['annotations'].apply(pd.Series)
-    data_annot = data_annot['result'].explode().apply(pd.Series)
-    data_annot = data_annot['value'].apply(pd.Series)
-    data_annot = data_annot['choices'].explode()
-
-    # Note: keeping as categorical for now because might want to add ACCIDENT label
-    data_annot.fillna('IRRELEVANT',inplace=True)
-    data_annot.rename('label', inplace=True)
-
-    # Merge and write
-    data = pd.concat([data_input, data_annot], axis=1)
+    data = extract_ls(deps_path)
     data.to_json(out_path, lines=True, orient="records", index=False)
     return data
 
 def split(dep_path, train_path, dev_path, test_path):
-    logger = logging.getLogger(__name__)
-
     logger.debug("Splitting text.")
     article_data = pd.read_json(dep_path, lines=True, orient="records")
     all_labels = article_data['label'].unique()
@@ -106,17 +84,11 @@ def split(dep_path, train_path, dev_path, test_path):
     _to_docbin(dev, dev_path)
     _to_docbin(test, test_path)
 
-def init_config(base_cfg, full_cfg):
-    command = f"python -m spacy init fill-config {base_cfg} {full_cfg}"
-    cmd(command)
-
-def train(train_path, dev_path, full_cfg, model_path, overrides: dict[str,Any] = {}):
-    command = f"""python -m spacy train {full_cfg}
-                --paths.train {train_path} --paths.dev {dev_path}
-                --output {model_path}"""
-    for key,val in overrides.items():
-        command += f" --{key} {val}"
-    cmd(command, "Training time: {:.1f}s")
+def train(base_cfg, full_cfg, train_path, dev_path, out_path, overrides=None):
+    init_config(base_cfg, full_cfg)
+    train_spacy(train_path, dev_path, full_cfg, out_path, overrides)
+    metrics = load_metrics(out_path)
+    return metrics
 
 def filter(model_path, in_data_path, out_data_path):
     with NamedTemporaryFile("wb") as f:

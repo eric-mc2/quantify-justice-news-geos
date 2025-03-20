@@ -3,7 +3,7 @@ raw:
   article_text: "raw/newsarticles_article.parquet"
 
 pre_relevance:
-  article_text: "pre_relevance/articles.parquet"
+  article_text_filtered: "pre_relevance/articles.parquet"
 
 art_relevance:
   article_text_prototype: "art_relevance/articles_prototype.parquet"
@@ -14,14 +14,15 @@ art_relevance:
   article_text_train: "art_relevance/articles_train.spacy"
   article_text_dev: "art_relevance/articles_dev.spacy"
   article_text_test: "art_relevance/articles_test.spacy"
+  article_text_filtered: "art_relevance/articles_filtered.parquet"
   
 
 sent_relevance:
-  article_text_prototype: "sent_relevance/articles_prototype.parquet"
   # This is JSON because Label-Studio doesn't accept jsonl!
   article_text_preproc: "sent_relevance/articles_preproc.json"
+  article_text_labeled_verbose: "sent_relevance/articles_labeled_verbose.json"
   article_text_labeled: "sent_relevance/articles_labeled.jsonl"
-  article_text_train: "sent_relevance/articles_train.jsonl"
-  article_text_dev: "sent_relevance/articles_dev.jsonl"
-  article_text_test: "sent_relevance/articles_test.jsonl"
+  article_text_train: "sent_relevance/articles_train.spacy"
+  article_text_dev: "sent_relevance/articles_dev.spacy"
+  article_text_test: "sent_relevance/articles_test.spacy"
   

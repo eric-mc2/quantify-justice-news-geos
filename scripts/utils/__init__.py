@@ -1,14 +1,5 @@
-import spacy
 from typing import Any
 from scripts.utils.config import _deep_union
-
-def load_spacy(model, **kwargs):
-    try:
-        nlp = spacy.load(model, **kwargs)
-    except:
-        spacy.cli.download(model)
-        nlp = spacy.load(model, **kwargs)
-    return nlp
 
 def flatten_config(cfg: dict[str, Any], parent: str = ""):
     flat = {}

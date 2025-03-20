@@ -1,92 +1,74 @@
-from zipfile import ZipFile
-import gzip
-import pandas as pd
-import pyarrow.parquet as pq
-import pyarrow as pa
-import os
-from scripts.utils.config import Config
-from scripts.utils import preprocessing as pre
-from scripts.utils import load_spacy
-import spacy 
-
+from functools import partial
 import dagster as dg
-from dagster import get_dagster_logger
 
-@dg.asset(deps=["art_relevant_predict"])
-def prototype_sample():
-    config = Config()
-    dep_path = config.get_data_path("pre_relevance.article_text")
-    out_path = config.get_data_path("relevance.article_text_prototype")
-    data = pd.read_parquet(dep_path)
-    proto = data.sample(200, random_state=31525)
-    proto.to_parquet(out_path)
-    
-@dg.asset(deps=[prototype_sample])
+from scripts.utils.config import Config
+from scripts.sent_relevance import operations as ops
+from scripts.utils.dagster import dg_table_schema
+
+config = Config()
+dg_asset = partial(dg.asset, key_prefix=__name__.replace(".","_"))
+
+@dg_asset(deps=["scripts_art_relevance_filter"])
 def preprocess():
-    config = Config()
-    logger = get_dagster_logger()
-    dep_path = config.get_data_path("relevance.article_text_prototype")
-    out_path = config.get_data_path("relevance.article_text_preproc")
-    
-    logger.debug("Concatenating text.")
-    article_data = pd.read_parquet(dep_path)
-    article_data['text'] = article_data['title'] + "\n.\n" + article_data['bodytext']
-    article_data = article_data.drop(columns=['title','bodytext'])
-    logger.debug("Normalizing text.")
-    article_data = pre.normalize(article_data)
+    dep_path = config.get_data_path("art_relevance.article_text_filtered")
+    out_path = config.get_data_path("sent_relevance.article_text_preproc")
+    model_path = config.get_param("sent_relevance.base_model")
+    df = ops.preprocess(dep_path, model_path, out_path)
+    return dg.MaterializeResult(metadata={
+        "dagster/column_schema": dg_table_schema(df),
+        "dagster/row_count": len(df),
+        "nunique_articles": df['id'].nunique(),
+    })
 
-    logger.debug("Sentencizing text.")
-    nlp = load_spacy(config.get_param("relevance.base_model"))
-    nlp.disable_pipes()
-    nlp.add_pipe("sentencizer")
-
-    docs = nlp.pipe(article_data['text'], batch_size=64)
-    article_data['docs'] = [[(i, s.text) for i,s in enumerate(d.sents)] for d in docs]
-    article_data = (article_data
-                .drop(columns=['text'])
-                .explode('docs'))
-    sentences = pd.DataFrame.from_records(article_data['docs'], columns=['sentence_idx', 'sentence'])
-    article_data = pd.concat([article_data.drop(columns=['docs']), sentences], axis=1)
-
-    article_data.to_json(out_path, orient='records', index=False, force_ascii=True)
-
-@dg.asset(deps=[preprocess])
+@dg_asset(deps=[preprocess], description="Manually label in Label Studio")
 def annotate():
-    config = Config()
-    out_path = config.get_data_path("relevance.article_text_labeled")
-    assert os.path.exists(out_path)
+    # Creating the verbose labels is a manual process! 
+    # Used Label Studio on preprocessed outs.
+    deps_path = config.get_data_path("sent_relevance.article_text_labeled_verbose")
+    out_path = config.get_data_path("sent_relevance.article_text_labeled")
+    df = ops.annotate(deps_path, out_path)
+    all_labels = {lab for row in df['multilabel'] for lab in row}
+    label_stats = {}
+    for lab in all_labels:
+        pct = df['multilabel'].apply(lambda xs: lab in xs).mean()
+        label_stats[f"pct_{lab}"] = float(pct)
+    return dg.MaterializeResult(metadata={
+        "dagster/column_schema": dg_table_schema(df),
+        "dagster/row_count": len(df)
+        } | label_stats
+    )
 
 @dg.multi_asset(
         deps=[annotate],
         outs={
-            "relevance_article_text_train": dg.AssetOut(),
-            "relevance_article_text_dev": dg.AssetOut(),
-            "relevance_article_text_test": dg.AssetOut(),
-        }
+            "sent_relevance_article_text_train": dg.AssetOut(description="Training data"),
+            "sent_relevance_article_text_dev": dg.AssetOut(description="Testing data"),
+            "sent_relevance_article_text_test": dg.AssetOut(description="Final performance estimate"),
+        },
 )
 def split():
-    config = Config()
-    logger = get_dagster_logger()
-    dep_path = config.get_data_path("relevance.article_text_preproc")
-    train_path = config.get_data_path("relevance.article_text_train")
-    dev_path = config.get_data_path("relevance.article_text_dev")
-    test_path = config.get_data_path("relevance.article_text_test")
+    dep_path = config.get_data_path("sent_relevance.article_text_labeled")
+    train_path = config.get_data_path("sent_relevance.article_text_train")
+    dev_path = config.get_data_path("sent_relevance.article_text_dev")
+    test_path = config.get_data_path("sent_relevance.article_text_test")
+    ops.split(dep_path, train_path, dev_path, test_path)
+    return ("sent_relevance_article_text_train",
+            "sent_relevance_article_text_dev",
+            "sent_relevance_article_text_test")
 
-    logger.debug("Splitting text.")
-    article_data = pd.read_json(dep_path, orient="records")
-    train, dev, test = pre.split_train_dev_test(article_data)
-    del article_data
+@dg_asset(deps=["sent_relevance_article_text_train","sent_relevance_article_text_dev"],
+          description="Train sentence relevance classifier")
+def train():
+    train_path = config.get_data_path("sent_relevance.article_text_train")
+    dev_path = config.get_data_path("sent_relevance.article_text_dev")
+    base_cfg = config.get_param("sent_relevance.base_cfg")
+    full_cfg = config.get_param("sent_relevance.full_cfg")
+    out_path = config.get_param("sent_relevance.trained_model")
+    metrics = ops.train(base_cfg, full_cfg, train_path, dev_path, out_path)
+    return dg.MaterializeResult(metadata=metrics)
 
-    logger.debug("Writing text.")
-    train.filter(['id','text']).to_json(train_path, lines=True, orient='records', force_ascii=True)
-    dev.filter(['id','text']).to_json(dev_path, lines=True, orient='records', force_ascii=True)
-    test.filter(['id','text']).to_json(test_path, lines=True, orient='records', force_ascii=True)
-    
-    return ("relevance_article_text_train","relevance_article_text_dev","relevance_article_text_test")
-
-
-defs = dg.Definitions(assets=[prototype_sample,
-                              preprocess,
+defs = dg.Definitions(assets=[preprocess,
                               annotate,
-                              split])
+                              split,
+                              train])
 
