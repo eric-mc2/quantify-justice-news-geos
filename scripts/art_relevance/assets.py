@@ -1,7 +1,6 @@
 """Defines Dagster pipeline."""
 import dagster as dg
 import os
-import json
 from functools import partial
 
 from scripts.utils.config import Config
@@ -9,7 +8,8 @@ from scripts.art_relevance import operations as ops
 from scripts.utils.dagster import dg_table_schema
 
 config = Config()
-dg_asset = partial(dg.asset, key_prefix=__name__.replace(".","_"))
+PREFIX = "art_relevance"
+dg_asset = partial(dg.asset, key_prefix=[PREFIX])
 
 @dg_asset
 def extract():
@@ -56,13 +56,12 @@ def annotate():
         "pct_positive": float((df['label'] == 'CRIME').mean()),
     })
 
+split_train = dg.AssetSpec(dg.AssetKey([PREFIX,'split_train']), deps=[annotate], description="Training data")
+split_dev = dg.AssetSpec(dg.AssetKey([PREFIX,'split_dev']), deps=[annotate], description="Dev data")
+split_test = dg.AssetSpec(dg.AssetKey([PREFIX,'split_test']), deps=[annotate], description="Eval data")
+
 @dg.multi_asset(
-        deps=[annotate],
-        outs={
-            "art_relevance_article_text_train": dg.AssetOut(description="Training data"),
-            "art_relevance_article_text_dev": dg.AssetOut(description="Testing data"),
-            "art_relevance_article_text_test": dg.AssetOut(description="Final performance estimate"),
-        },
+        specs=[split_train, split_dev, split_test],
 )
 def split():
     dep_path = config.get_data_path("art_relevance.article_text_labeled")
@@ -70,9 +69,8 @@ def split():
     dev_path = config.get_data_path("art_relevance.article_text_dev")
     test_path = config.get_data_path("art_relevance.article_text_test")
     ops.split(dep_path, train_path, dev_path, test_path)
-    return ("art_relevance_article_text_train","art_relevance_article_text_dev","art_relevance_article_text_test")
 
-@dg_asset(deps=["art_relevance_article_text_train","art_relevance_article_text_dev"],
+@dg_asset(deps=[split_train, split_dev],
           description="Train article relevance classifier")
 def train():
     train_path = config.get_data_path("art_relevance.article_text_train")
@@ -102,6 +100,8 @@ defs = dg.Definitions(assets=[extract,
                               prototype_sample,
                               preprocess,
                               annotate,
-                              split,
+                              split_train,
+                              split_dev, 
+                              split_test,
                               train,
                               filter])

@@ -7,9 +7,10 @@ from scripts.sent_relevance import operations as ops
 from scripts.utils.dagster import dg_table_schema
 
 config = Config()
-dg_asset = partial(dg.asset, key_prefix=__name__.replace(".","_"))
+PREFIX = "sent_relevance"
+dg_asset = partial(dg.asset, key_prefix=[PREFIX])
 
-@dg_asset(deps=["scripts_art_relevance_filter"])
+@dg_asset(deps=[dg.AssetDep(dg.AssetKey(['art_relevance','filter']))])
 def preprocess():
     dep_path = config.get_data_path("art_relevance.article_text_filtered")
     out_path = config.get_data_path("sent_relevance.article_text_preproc")
@@ -39,13 +40,12 @@ def annotate():
         } | label_stats
     )
 
+split_train = dg.AssetSpec(dg.AssetKey([PREFIX,'split_train']), deps=[annotate], description="Training data")
+split_dev = dg.AssetSpec(dg.AssetKey([PREFIX,'split_dev']), deps=[annotate], description="Dev data")
+split_test = dg.AssetSpec(dg.AssetKey([PREFIX,'split_test']),deps=[annotate], description="Eval data")
+
 @dg.multi_asset(
-        deps=[annotate],
-        outs={
-            "sent_relevance_article_text_train": dg.AssetOut(description="Training data"),
-            "sent_relevance_article_text_dev": dg.AssetOut(description="Testing data"),
-            "sent_relevance_article_text_test": dg.AssetOut(description="Final performance estimate"),
-        },
+        specs = [split_train, split_dev, split_test]
 )
 def split():
     dep_path = config.get_data_path("sent_relevance.article_text_labeled")
@@ -53,11 +53,8 @@ def split():
     dev_path = config.get_data_path("sent_relevance.article_text_dev")
     test_path = config.get_data_path("sent_relevance.article_text_test")
     ops.split(dep_path, train_path, dev_path, test_path)
-    return ("sent_relevance_article_text_train",
-            "sent_relevance_article_text_dev",
-            "sent_relevance_article_text_test")
 
-@dg_asset(deps=["sent_relevance_article_text_train","sent_relevance_article_text_dev"],
+@dg_asset(deps=[split_train, split_dev],
           description="Train sentence relevance classifier")
 def train():
     train_path = config.get_data_path("sent_relevance.article_text_train")
@@ -87,7 +84,9 @@ def filter():
 
 defs = dg.Definitions(assets=[preprocess,
                               annotate,
-                              split,
+                              split_train,
+                              split_dev,
+                              split_test,
                               train,
                               filter])
 
