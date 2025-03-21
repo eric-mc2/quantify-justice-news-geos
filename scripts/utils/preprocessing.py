@@ -4,11 +4,10 @@ from textacy import preprocessing as tp
 def split_train_dev_test(data: pd.DataFrame, 
                          train_path: str = None, 
                          dev_path: str = None, 
-                         test_path:str = None):
-    train = data.sample(frac=.8, random_state=3925)
-    dev_test = data.loc[data.index.difference(train.index)]
-    dev = dev_test.sample(frac=.5, random_state=3925)
-    test = dev_test.loc[dev_test.index.difference(dev.index)]
+                         test_path: str = None,
+                         stratify: list[str] = None):
+    train, dev_test = _split(data, .8, stratify)
+    dev, test = _split(dev_test, .5, stratify)
     if train_path:
         train.to_parquet(train_path)
     if dev_path:
@@ -16,6 +15,17 @@ def split_train_dev_test(data: pd.DataFrame,
     if test_path:
         test.to_parquet(test_path)
     return train, dev, test
+
+def _split(df: pd.DataFrame, frac: float, stratify: list[str] = None):
+    if stratify:
+        df_items = df[stratify].drop_duplicates().sample(frac=frac, random_state=3925)
+        splits = df_items.merge(df, how='outer', indicator=True)
+        left = splits[splits._merge == 'both'].drop(columns='_merge')
+        right = splits[splits._merge == 'right_only'].drop(columns='_merge')
+    else:
+        left = df.sample(frac=frac, random_state=3925)
+        right = df.loc[df.index.difference(left.index)]
+    return (left, right)
 
 def normalize(df: pd.DataFrame, text_col: str = "text"):
     preproc = tp.make_pipeline(

@@ -41,3 +41,9 @@ geoms:
   street_intersections: "geoms/street_crosses.parquet"
   landmarks: "geoms/landmarks.parquet"
   hospitals: "geoms/hospitals.parquet"
+
+entity_recognition:
+  explore: "entity_recognition/explore.spacy"
+  article_text_train: "entity_recognition/articles_train.spacy"
+  article_text_dev: "entity_recognition/articles_dev.spacy"
+  article_text_test: "entity_recognition/articles_test.spacy"
