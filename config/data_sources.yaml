@@ -1,6 +1,11 @@
 raw:
   zip: "raw/cjp_tables_old.zip"
   article_text: "raw/newsarticles_article.parquet"
+  comm_areas: "raw/CommAreas_2025.csv"
+  neighborhoods: "raw/Neighborhoods_2025.csv"
+  parks: "raw/Parks_2025.csv"
+  street_names: "raw/StreetNames_2025.csv"
+  street_segs: "raw/StreetSegments_2025.geojson"
 
 pre_relevance:
   article_text_filtered: "pre_relevance/articles.parquet"
@@ -15,7 +20,6 @@ art_relevance:
   article_text_dev: "art_relevance/articles_dev.spacy"
   article_text_test: "art_relevance/articles_test.spacy"
   article_text_filtered: "art_relevance/articles_filtered.parquet"
-  
 
 sent_relevance:
   # This is JSON because Label-Studio doesn't accept jsonl!
@@ -27,3 +31,13 @@ sent_relevance:
   article_text_test: "sent_relevance/articles_test.spacy"
   article_text_filtered: "sent_relevance/articles_filtered.parquet"
   
+geoms:
+  comm_areas: "geoms/comm_areas.parquet"
+  neighborhoods: "geoms/neighborhoods.csv"
+  parks: "geoms/parks.csv"
+  street_names: "geoms/street_names.csv"
+  street_segs: "geoms/street_segments.parquet"
+  street_blocks: "geoms/street_blocks.parquet"
+  street_intersections: "geoms/street_crosses.parquet"
+  landmarks: "geoms/landmarks.parquet"
+  hospitals: "geoms/hospitals.parquet"

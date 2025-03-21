@@ -6,6 +6,8 @@ from scripts.utils.config import Config
 from scripts.utils.runners import cmd
 
 def dg_table_schema(df):
+    if isinstance(df, pd.Series):
+        df = pd.DataFrame(df)
     columns = []
     for col, dt in df.dtypes.items():
         if dt.name == 'object':
