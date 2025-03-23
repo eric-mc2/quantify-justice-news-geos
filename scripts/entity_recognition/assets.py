@@ -21,11 +21,11 @@ split_test = dg.AssetSpec(test_key, deps=[prev], description="Eval data")
 
 @dg.multi_asset(specs = [split_train, split_dev, split_test])
 def split():
-    dep_path = config.get_data_path("sent_relevance.article_text_filtered")
+    in_path = config.get_data_path("sent_relevance.article_text_filtered")
     train_path = config.get_data_path("entity_recognition.article_text_train")
     dev_path = config.get_data_path("entity_recognition.article_text_dev")
     test_path = config.get_data_path("entity_recognition.article_text_test")
-    train, dev, test = ops.split(dep_path, train_path, dev_path, test_path)
+    train, dev, test = ops.split(in_path, train_path, dev_path, test_path)
     yield dg.MaterializeResult(asset_key=train_key, metadata={
         "dagster/column_schema": dg_table_schema(train),
         "dagster/row_count": len(train),

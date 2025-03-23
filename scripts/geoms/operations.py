@@ -29,6 +29,7 @@ street_type_codes = {
     "PKWY": "PARK WAY",
     "PL": "PLACE",
     "ROW": "ROW",
+    "RD": "ROAD",
     "SQ": "SQUARE",
     "SR": "SERVICE ROAD",
     "ST": "STREET",
@@ -89,7 +90,14 @@ def clean_street_segs(in_file, out_file) -> gpd.GeoDataFrame:
 def clean_street_names(in_file, out_file) -> pd.DataFrame: 
     df = pd.read_csv(in_file)
     df.columns = [c.strip() for c in df.columns]
-    df['street_partial'] = df['Street'] + " " + df['Suffix']
+    df['dir_exp'] = df['Direction'].replace(suf_dir_codes)
+    df['suf_exp'] = df['Suffix'].replace(street_type_codes)
+    df['combined_name_1'] = df['Direction'] + " " + df['Street'] + " " + df['Suffix']
+    df['combined_name_2'] = df['Direction'] + " " + df['Street'] + " " + df['suf_exp']
+    df['combined_name_3'] = df['Direction'] + " " + df['Street']
+    df['combined_name_4'] = df['dir_exp'] + " " + df['Street'] + " " + df['Suffix']
+    df['combined_name_5'] = df['dir_exp'] + " " + df['Street'] + " " + df['suf_exp']
+    df['combined_name_6'] = df['dir_exp'] + " " + df['Street']
     df.to_csv(out_file, index=False)
     return df
 
