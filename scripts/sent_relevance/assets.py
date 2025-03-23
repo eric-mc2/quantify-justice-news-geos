@@ -12,10 +12,10 @@ dg_asset = partial(dg.asset, key_prefix=[PREFIX])
 
 @dg_asset(deps=[dg.AssetDep(dg.AssetKey(['art_relevance','filter']))])
 def preprocess():
-    dep_path = config.get_data_path("art_relevance.article_text_filtered")
+    in_path = config.get_data_path("art_relevance.article_text_filtered")
     out_path = config.get_data_path("sent_relevance.article_text_preproc")
     model_path = config.get_param("sent_relevance.base_model")
-    df = ops.preprocess(dep_path, model_path, out_path)
+    df = ops.preprocess(in_path, model_path, out_path)
     return dg.MaterializeResult(metadata={
         "dagster/column_schema": dg_table_schema(df),
         "dagster/row_count": len(df),
@@ -48,11 +48,11 @@ split_test = dg.AssetSpec(dg.AssetKey([PREFIX,'split_test']),deps=[annotate], de
         specs = [split_train, split_dev, split_test]
 )
 def split():
-    dep_path = config.get_data_path("sent_relevance.article_text_labeled")
+    in_path = config.get_data_path("sent_relevance.article_text_labeled")
     train_path = config.get_data_path("sent_relevance.article_text_train")
     dev_path = config.get_data_path("sent_relevance.article_text_dev")
     test_path = config.get_data_path("sent_relevance.article_text_test")
-    ops.split(dep_path, train_path, dev_path, test_path)
+    ops.split(in_path, train_path, dev_path, test_path)
 
 @dg_asset(deps=[split_train, split_dev],
           description="Train sentence relevance classifier")

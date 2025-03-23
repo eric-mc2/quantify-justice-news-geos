@@ -13,21 +13,21 @@ dg_asset = partial(dg.asset, key_prefix=[PREFIX])
 
 @dg_asset
 def extract():
-    dep_path = config.get_data_path("raw.zip")
+    in_path = config.get_data_path("raw.zip")
     out_path = config.get_data_path("raw.article_text")
-    ops.extract(dep_path, out_path)
+    ops.extract(in_path, out_path)
 
 @dg_asset(deps=[extract], description="Filter using external relevance model")
 def pre_relevant():
-    dep_path = config.get_data_path("raw.article_text")
+    in_path = config.get_data_path("raw.article_text")
     out_path = config.get_data_path("pre_relevance.article_text_filtered")
-    ops.news_relevant(dep_path, out_path)
+    ops.news_relevant(in_path, out_path)
 
 @dg_asset(deps=[pre_relevant], description="Pick k << N rows for rapid dev/exploration")
 def prototype_sample():
-    dep_path = config.get_data_path("pre_relevance.article_text_filtered")
+    in_path = config.get_data_path("pre_relevance.article_text_filtered")
     out_path = config.get_data_path("art_relevance.article_text_prototype")
-    df = ops.prototype_sample(dep_path, out_path)
+    df = ops.prototype_sample(in_path, out_path)
     return dg.MaterializeResult(metadata={
         "dagster/column_schema": dg_table_schema(df),
         "dagster/row_count": len(df),
@@ -35,9 +35,9 @@ def prototype_sample():
     
 @dg_asset(deps=[prototype_sample], description="Normalize text for labeling")
 def preprocess():
-    dep_path = config.get_data_path("art_relevance.article_text_prototype")
+    in_path = config.get_data_path("art_relevance.article_text_prototype")
     out_path = config.get_data_path("art_relevance.article_text_preproc")
-    df = ops.preprocess(dep_path, out_path)
+    df = ops.preprocess(in_path, out_path)
     return dg.MaterializeResult(metadata={
         "dagster/column_schema": dg_table_schema(df),
         "dagster/row_count": len(df),
@@ -64,11 +64,11 @@ split_test = dg.AssetSpec(dg.AssetKey([PREFIX,'split_test']), deps=[annotate], d
         specs=[split_train, split_dev, split_test],
 )
 def split():
-    dep_path = config.get_data_path("art_relevance.article_text_labeled")
+    in_path = config.get_data_path("art_relevance.article_text_labeled")
     train_path = config.get_data_path("art_relevance.article_text_train")
     dev_path = config.get_data_path("art_relevance.article_text_dev")
     test_path = config.get_data_path("art_relevance.article_text_test")
-    ops.split(dep_path, train_path, dev_path, test_path)
+    ops.split(in_path, train_path, dev_path, test_path)
 
 @dg_asset(deps=[split_train, split_dev],
           description="Train article relevance classifier")

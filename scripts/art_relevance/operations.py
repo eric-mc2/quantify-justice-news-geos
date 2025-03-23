@@ -17,8 +17,8 @@ from scripts.utils.spacy import (init_config, train as train_spacy, load_metrics
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-def extract(dep_path, out_path):
-    with ZipFile(dep_path, 'r') as zf:
+def extract(in_path, out_path):
+    with ZipFile(in_path, 'r') as zf:
         with zf.open("cjp_tables/newsarticles_article.csv.gz", "r") as zzf:
             with gzip.open(zzf) as zzzf:
                 article_data_chunks = pd.read_csv(zzzf,
@@ -35,20 +35,20 @@ def extract(dep_path, out_path):
                     writer.write_table(table)
                 writer.close()
 
-def news_relevant(dep_path, out_path):
-    article_data = pd.read_parquet(dep_path)
+def news_relevant(in_path, out_path):
+    article_data = pd.read_parquet(in_path)
     filtered_articles = article_data[article_data.relevant].drop(columns='relevant')
     filtered_articles.to_parquet(out_path)
 
-def prototype_sample(dep_path, out_path=None, k=200, seed=31825):
-    data = pd.read_parquet(dep_path)
+def prototype_sample(in_path, out_path=None, k=200, seed=31825):
+    data = pd.read_parquet(in_path)
     proto = data.sample(k, random_state=seed)
     if out_path:
         proto.to_parquet(out_path)
     return proto
     
-def preprocess(dep_path, out_path):
-    article_data = pd.read_parquet(dep_path, columns=['id','title'])
+def preprocess(in_path, out_path):
+    article_data = pd.read_parquet(in_path, columns=['id','title'])
     logger.debug("Normalizing text.")
     article_data = pre.normalize(article_data, "title")
     if out_path:
@@ -60,9 +60,9 @@ def annotate(deps_path, out_path):
     data.to_json(out_path, lines=True, orient="records", index=False)
     return data
 
-def split(dep_path, train_path, dev_path, test_path):
+def split(in_path, train_path, dev_path, test_path):
     logger.debug("Splitting text.")
-    article_data = pd.read_json(dep_path, lines=True, orient="records")
+    article_data = pd.read_json(in_path, lines=True, orient="records")
     all_labels = article_data['label'].unique()
     train, dev, test = pre.split_train_dev_test(article_data)
     del article_data
