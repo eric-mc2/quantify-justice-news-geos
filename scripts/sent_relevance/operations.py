@@ -23,9 +23,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-def preprocess(dep_path, base_model, out_path):
+def preprocess(in_path, base_model, out_path):
     logger.debug("Concatenating text.")
-    article_data = pd.read_parquet(dep_path)
+    article_data = pd.read_parquet(in_path)
     article_data['text'] = article_data['title'] + "\n.\n" + article_data['bodytext']
     article_data = article_data.drop(columns=['title','bodytext'])
     
@@ -71,9 +71,9 @@ def _to_docbin(df, all_labels, out_path):
         doc_bin.add(doc)
     doc_bin.to_disk(out_path)
 
-def split(dep_path, train_path, dev_path, test_path):    
+def split(in_path, train_path, dev_path, test_path):    
     logger.debug("Splitting text.")
-    article_data = pd.read_json(dep_path, lines=True, orient="records")
+    article_data = pd.read_json(in_path, lines=True, orient="records")
     all_labels = {lab for row in article_data['multilabel'] for lab in row}
     train, dev, test = pre.split_train_dev_test(article_data)
     del article_data
@@ -108,9 +108,10 @@ def filter(art_model, sent_model, seed, in_data_path, out_data_path):
             batch_size=1,
             n_process=1)
         f2.seek(0)
-        docs = DocBin().from_disk(f2.name).get_docs(nlp.vocab)
+        docs = list(DocBin().from_disk(f2.name).get_docs(nlp.vocab))
     relevant = [any(map(lambda x: x[0] != 'IRRELEVANT' and x[1]>.5, d.cats.items())) for d in docs]
     relevant = pd.Series(relevant, index=df_orig.index)
-    result = df_orig[relevant]
+    cats = pd.Series([d.cats for d in docs], index=df_orig.index).apply(pd.Series)
+    result = pd.concat([df_orig[relevant], cats[relevant]], axis=1)
     result.to_parquet(out_data_path)
     return result
