@@ -7,7 +7,7 @@ from scripts.geoms import operations as ops
 from scripts.utils.dagster import dg_table_schema
 
 config = Config()
-dg_asset = partial(dg.asset, key_prefix=["geoms"])
+dg_asset = partial(dg.asset, key_prefix=["geoms"], group_name="geoms")
 
 @dg_asset()
 def comm_areas():

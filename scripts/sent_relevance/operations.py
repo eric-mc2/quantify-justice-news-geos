@@ -51,8 +51,8 @@ def preprocess(in_path, base_model, out_path):
     article_data.to_json(out_path, orient='records', index=False, force_ascii=True)
     return article_data
 
-def annotate(deps_path, out_path):
-    data = extract_ls(deps_path)
+def annotate(in_path, out_path):
+    data = extract_ls(in_path)
     groupby = data.columns.drop('label').to_list()
     data = data.groupby(groupby, as_index=False)['label'].agg(tuple)
     data = data.rename(columns={'label':'multilabel'})

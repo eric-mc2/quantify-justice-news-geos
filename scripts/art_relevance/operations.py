@@ -55,8 +55,8 @@ def preprocess(in_path, out_path):
         article_data.to_json(out_path, orient='records', index=False, force_ascii=True)
     return article_data
 
-def annotate(deps_path, out_path):
-    data = extract_ls(deps_path)
+def annotate(in_path, out_path):
+    data = extract_ls(in_path)
     data.to_json(out_path, lines=True, orient="records", index=False)
     return data
 

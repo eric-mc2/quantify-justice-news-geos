@@ -9,7 +9,7 @@ from scripts.utils.dagster import dg_table_schema
 
 config = Config()
 PREFIX = "art_relevance"
-dg_asset = partial(dg.asset, key_prefix=[PREFIX])
+dg_asset = partial(dg.asset, key_prefix=[PREFIX], group_name=PREFIX)
 
 @dg_asset
 def extract():
@@ -47,18 +47,18 @@ def preprocess():
 def annotate():
     # Creating the verbose labels is a manual process! 
     # Used Label Studio on preprocessed outs.
-    deps_path = config.get_data_path("art_relevance.article_text_labeled_verbose")
+    in_path = config.get_data_path("art_relevance.article_text_labeled_verbose")
     out_path = config.get_data_path("art_relevance.article_text_labeled")
-    df = ops.annotate(deps_path, out_path)
+    df = ops.annotate(in_path, out_path)
     return dg.MaterializeResult(metadata={
         "dagster/column_schema": dg_table_schema(df),
         "dagster/row_count": len(df),
         "pct_positive": float((df['label'] == 'CRIME').mean()),
     })
 
-split_train = dg.AssetSpec(dg.AssetKey([PREFIX,'split_train']), deps=[annotate], description="Training data")
-split_dev = dg.AssetSpec(dg.AssetKey([PREFIX,'split_dev']), deps=[annotate], description="Dev data")
-split_test = dg.AssetSpec(dg.AssetKey([PREFIX,'split_test']), deps=[annotate], description="Eval data")
+split_train = dg.AssetSpec(dg.AssetKey([PREFIX,'split_train']), deps=[annotate], group_name=PREFIX, description="Training data")
+split_dev = dg.AssetSpec(dg.AssetKey([PREFIX,'split_dev']), deps=[annotate], group_name=PREFIX, description="Dev data")
+split_test = dg.AssetSpec(dg.AssetKey([PREFIX,'split_test']), deps=[annotate], group_name=PREFIX, description="Eval data")
 
 @dg.multi_asset(
         specs=[split_train, split_dev, split_test],
