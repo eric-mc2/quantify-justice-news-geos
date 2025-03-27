@@ -1,5 +1,4 @@
 import pandas as pd
-import logging
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -14,14 +13,9 @@ from scripts.utils.spacy import (load_spacy,
                                  train as train_spacy)
 from scripts.utils.labelstudio import extract as extract_ls
 from scripts.art_relevance.operations import filter as art_filter
+from scripts.utils.logging import setup_logger
 
-# TODO: move basic config to top-level definitions
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger = setup_logger(__name__)
 
 def preprocess(in_path, base_model, out_path):
     logger.debug("Concatenating text.")

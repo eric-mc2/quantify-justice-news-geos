@@ -1,6 +1,5 @@
 from functools import partial
 import dagster as dg
-import os
 
 from scripts.utils.config import Config
 from scripts.entity_recognition import operations as ops

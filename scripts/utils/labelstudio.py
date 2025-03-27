@@ -1,9 +1,8 @@
 import pandas as pd
-import logging
 from dataclasses import dataclass
+from scripts.utils.logging import setup_logger
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger = setup_logger(__name__)
 
 def extract(in_data, task="textcat"):
     data = pd.read_json(in_data)

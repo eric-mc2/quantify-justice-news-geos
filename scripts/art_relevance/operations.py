@@ -12,9 +12,9 @@ from tempfile import NamedTemporaryFile
 from scripts.utils import preprocessing as pre
 from scripts.utils.labelstudio import extract as extract_ls
 from scripts.utils.spacy import (init_config, train as train_spacy, load_metrics)
+from scripts.utils.logging import setup_logger
 
-
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 logger.setLevel(logging.INFO)
 
 def extract(in_path, out_path):
