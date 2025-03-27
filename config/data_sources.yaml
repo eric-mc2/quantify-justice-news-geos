@@ -34,11 +34,11 @@ sent_relevance:
 geoms:
   comm_areas: "geoms/comm_areas.parquet"
   neighborhoods: "geoms/neighborhoods.csv"
-  parks: "geoms/parks.csv"
   street_names: "geoms/street_names.csv"
   street_segs: "geoms/street_segments.parquet"
   street_blocks: "geoms/street_blocks.parquet"
   street_intersections: "geoms/street_crosses.parquet"
+  parks: "geoms/parks.csv"
   landmarks: "geoms/landmarks.parquet"
   hospitals: "geoms/hospitals.parquet"
 
@@ -47,3 +47,9 @@ entity_recognition:
   article_text_train: "entity_recognition/articles_train.spacy"
   article_text_dev: "entity_recognition/articles_dev.spacy"
   article_text_test: "entity_recognition/articles_test.spacy"
+  prelabel_train: "entity_recognition/prelabels_train.json"
+  prelabel_dev: "entity_recognition/prelabels_dev.json"
+  labels_train_verbose: "entity_recognition/labels_train_verbose.json"
+  labels_dev_verbose: "entity_recognition/labels_dev_verbose.json"
+  labels_train: "entity_recognition/labels_train.spacy"
+  labels_dev: "entity_recognition/labels_dev.spacy"

@@ -17,8 +17,11 @@ def cmd(command: str | list[str], time_fmt=None, env=None):
                                bufsize=1)
     for line in process.stdout:
         print(line, end='', flush=True)
-    process.wait()
+    status = process.wait()
     end = time.time()
 
     if time_fmt:
         print(time_fmt.format(end - start))
+
+    if status:
+        raise ChildProcessError(f"Exited with {status} from command: {command}")

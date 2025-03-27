@@ -5,9 +5,15 @@ import os
 import json
 from math import nan
 from scripts.utils import flatten_config
+from scripts.utils.logging import setup_logger
 
-def init_config(base_cfg, full_cfg):
+logger = setup_logger(__name__)
+
+def init_config(base_cfg, full_cfg, code=None):
     command = f"python -m spacy init fill-config {base_cfg} {full_cfg}"
+    if code:
+        command += f" --code {code}"
+    logger.info(f"Running command {command}")
     cmd(command)
 
 def load_spacy(model, **kwargs):
@@ -17,6 +23,13 @@ def load_spacy(model, **kwargs):
         spacy.cli.download(model)
         nlp = spacy.load(model, **kwargs)
     return nlp
+
+def init_labels(full_cfg, train_path, dev_path, out_path, code=None):
+    command = f"""python -m spacy init labels {full_cfg} 
+                {out_path} --paths.train {train_path} --paths.dev {dev_path}"""
+    if code:
+        command += f" --code {code}"
+    cmd(command)
 
 def train(train_path, dev_path, full_cfg, model_path, overrides: dict[str,Any] = {}):
     command = f"""python -m spacy train {full_cfg}
