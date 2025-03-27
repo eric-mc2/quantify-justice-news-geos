@@ -1,35 +1,24 @@
 import pandas as pd
-import geopandas as gpd
-import logging
 import json 
 from dataclasses import asdict
+import os
 
 import spacy
-from spacy.tokens import DocBin, Doc, Span
+from spacy.tokens import DocBin
 from spacy.util import filter_spans
-from spacy.language import Language
-from spacy.matcher.phrasematcher import PhraseMatcher
-from spacy.matcher.matcher import Matcher
 from thinc.api import Config
 
-from scripts.geoms.operations import sides
 from scripts.utils.labelstudio import (extract as extract_ls,
                                        LSDoc, LSData, LSPrediction,
                                        LSResult, LSValue)
 from scripts.utils import preprocessing as pre
 from scripts.utils.spacy import (load_spacy, 
                                  init_config, 
-                                 load_metrics,
                                  init_labels,
                                  train as train_spacy)
+from scripts.utils.logging import setup_logger
 
-# TODO: move basic config to top-level definitions
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+setup_logger(__name__)
 
 def _to_docbin(df, out_path):
     nlp = spacy.blank("en")
@@ -119,96 +108,23 @@ def train(base_cfg,
           out_path, 
           comm_area_path,
           neighborhood_path,
-          street_path,
-          overrides=None):
+          street_path):
     cfg = Config().from_disk(base_cfg)
     cfg['components']['gpe_matcher']['comm_area_path'] = comm_area_path
     cfg['components']['gpe_matcher']['neighborhood_path'] = neighborhood_path
     cfg['components']['street_matcher']['street_name_path'] = street_path
+    cfg['paths']['train'] = train_path
+    cfg['paths']['dev'] = dev_path
+    cfg['corpora']['train']['path'] = train_path
+    cfg['corpora']['dev']['path'] = dev_path
     cfg.to_disk(base_cfg)
-    init_config(base_cfg, full_cfg, __file__)
-    label_path = cfg['initialize']['components']['ner']['labels']['path']
-    init_labels(full_cfg, train_path, dev_path, label_path, __file__)
-    # train_spacy(train_path, dev_path, full_cfg, out_path, overrides)
+
+    code_path = os.path.join(os.path.dirname(__file__), "components.py")
+    # label_path = cfg['initialize']['components']['ner']['labels']['path']
+    # os.makedirs(label_path, exist_ok=True)
+
+    init_config(base_cfg, full_cfg, code_path)
+    # init_labels(full_cfg, label_path, code_path)
+    train_spacy(train_path, dev_path, full_cfg, out_path, {"code": code_path})
     # metrics = load_metrics(out_path)
     # return metrics
-
-@Language.factory("gpe_matcher")
-def create_gpe_matcher(nlp, name, comm_area_path=None, neighborhood_path=None):
-    gpes = pd.concat([gpd.read_parquet(comm_area_path)['community_name'].rename('name'),
-                        pd.read_csv(neighborhood_path)['name'],
-                        pd.Series(sides)], ignore_index=True)
-    gpes = gpes.str.split(",", expand=False).explode()
-    gpes = gpes.str.title().drop_duplicates().sort_values()
-    
-    matcher = PhraseMatcher(nlp.vocab)
-    patterns = list(nlp.tokenizer.pipe(gpes))
-    matcher.add("GPE", patterns)
-
-    def match_gpes(doc: Doc):
-        matches = matcher(doc, as_spans=True)
-        doc.ents = filter_spans(list(doc.ents) + matches)
-        return doc
-    
-    return match_gpes
-    
-@Language.factory("street_matcher")
-def register_street_matcher(nlp, name, street_name_path=None):
-    street_names = pd.read_csv(street_name_path)
-    street_names = street_names.filter(like='combined').melt()['value']
-    street_names = street_names.str.title().drop_duplicates().sort_values()
-
-    loc_matcher = PhraseMatcher(nlp.vocab)
-    patterns = list(nlp.tokenizer.pipe(street_names))
-    loc_matcher.add("FAC", patterns)
-
-    def match_streets(doc: Doc):
-        matches = loc_matcher(doc, as_spans=True)
-        doc.ents = filter_spans(list(doc.ents) + matches)
-        return doc
-        
-    return match_streets
-
-@Language.factory("age_matcher")
-def register_age_matcher(nlp, name):
-    matcher = Matcher(nlp.vocab) # Matcher might not be the right thing here since it operates on tokens
-    matcher.add("CARDINAL", [[{"TEXT": {"REGEX": r"\d+[ -]year[ -]old"}}]])
-    
-    def match_age(doc: Doc):
-        matches = matcher(doc, as_spans=True)
-        doc.ents = filter_spans(list(doc.ents) + matches)
-        return doc
-
-    return match_age
-
-@Language.component("block_matcher")
-def expand_street_blocks(doc: Doc):
-    new_ents = []
-    for idx, ent in enumerate(doc.ents):
-        # Only check for title if it's a person and not the first token
-        if ent.label_ == "FAC" and ent.start >= 3 and idx >= 1:
-            prev_ent = list(doc.ents)[idx-1]
-            prev_tokens = doc[ent.start - 3: ent.start]
-            # Must match [CARDINAL] block of [FAC]
-            if (prev_tokens[2].text == "of" and prev_tokens[1].text == "block"
-                and prev_ent.label_ == "CARDINAL" and prev_tokens[0].text == prev_ent.text):
-                new_ent = Span(doc, ent.start - 3, ent.end, label=ent.label)
-                new_ents.append(new_ent)
-    doc.ents = filter_spans(list(doc.ents) + new_ents)
-    return doc
-
-@Language.component("intersection_matcher")
-def expand_intersections(doc: Doc):
-    new_ents = []
-    for idx, ent in enumerate(doc.ents):
-        # Only check for title if it's a person and not the first token
-        if ent.label_ == "FAC" and ent.start >= 2 and idx >= 1:
-            prev_ent = list(doc.ents)[idx-1]
-            prev_tokens = doc[ent.start - 2: ent.start]
-            # Must match [STREET] and [STREET]
-            if ((prev_tokens[1].text == "and" or prev_tokens[1].text == "&")
-                and prev_ent.label_ == "FAC" and prev_tokens[0].text == prev_ent.text):
-                new_ent = Span(doc, ent.start - 2, ent.end, label=ent.label)
-                new_ents.append(new_ent)
-    doc.ents = filter_spans(list(doc.ents) + new_ents)
-    return doc

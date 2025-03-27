@@ -24,9 +24,11 @@ def load_spacy(model, **kwargs):
         nlp = spacy.load(model, **kwargs)
     return nlp
 
-def init_labels(full_cfg, train_path, dev_path, out_path, code=None):
-    command = f"""python -m spacy init labels {full_cfg} 
-                {out_path} --paths.train {train_path} --paths.dev {dev_path}"""
+def init_labels(full_cfg, out_path, code=None):
+    # XXX: Couldn't get this to work! Throws strange error about
+    # out path being a directory when it's unclear from docs if it should be
+    # file or directory. 
+    command = f"""python -m spacy init labels {full_cfg} {out_path}"""
     if code:
         command += f" --code {code}"
     cmd(command)
