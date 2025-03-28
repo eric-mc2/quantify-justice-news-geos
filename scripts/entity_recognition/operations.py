@@ -18,7 +18,7 @@ from scripts.utils.spacy import (load_spacy,
                                  train as train_spacy)
 from scripts.utils.logging import setup_logger
 
-setup_logger(__name__)
+logger = setup_logger(__name__)
 
 def _to_docbin(df, out_path):
     nlp = spacy.blank("en")
@@ -110,9 +110,9 @@ def train(base_cfg,
           neighborhood_path,
           street_path):
     cfg = Config().from_disk(base_cfg)
-    cfg['components']['gpe_matcher']['comm_area_path'] = comm_area_path
-    cfg['components']['gpe_matcher']['neighborhood_path'] = neighborhood_path
-    cfg['components']['street_matcher']['street_name_path'] = street_path
+    cfg['initialize']['components']['gpe_matcher']['comm_area_path'] = comm_area_path
+    cfg['initialize']['components']['gpe_matcher']['neighborhood_path'] = neighborhood_path
+    cfg['initialize']['components']['street_matcher']['street_name_path'] = street_path
     cfg['paths']['train'] = train_path
     cfg['paths']['dev'] = dev_path
     cfg['corpora']['train']['path'] = train_path

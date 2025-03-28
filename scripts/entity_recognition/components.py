@@ -1,64 +1,95 @@
 import pandas as pd
 import geopandas as gpd
 
-from spacy.tokens import Doc, Span
-from spacy.util import filter_spans
+from spacy.tokens import Doc, Span, DocBin
+from spacy.util import filter_spans, ensure_path
 from spacy.language import Language
 from spacy.matcher.phrasematcher import PhraseMatcher
 from spacy.matcher.matcher import Matcher
 
 from scripts.geoms.operations import sides
 
-@Language.factory("gpe_matcher")
-def create_gpe_matcher(nlp, name, comm_area_path=None, neighborhood_path=None):
-    gpes = pd.concat([gpd.read_parquet(comm_area_path)['community_name'].rename('name'),
-                        pd.read_csv(neighborhood_path)['name'],
-                        pd.Series(sides)], ignore_index=True)
-    gpes = gpes.str.split(",", expand=False).explode()
-    gpes = gpes.str.title().drop_duplicates().sort_values()
-    
-    matcher = PhraseMatcher(nlp.vocab)
-    patterns = list(nlp.tokenizer.pipe(gpes))
-    matcher.add("GPE", patterns)
+class MatcherBase:
+    def __init__(self, nlp, name: str):
+        self.name = name
+        self.matcher = None
+        self.patterns = None
+        self.vocab = nlp.vocab
 
-    def match_gpes(doc: Doc):
-        matches = matcher(doc, as_spans=True)
+    def to_disk(self, path, exclude=tuple()):
+        # This will receive the directory path + /my_component
+        path = ensure_path(path)
+        if not path.exists():
+            path.mkdir()
+        data_path = path / "patterns.spacy"
+        db = DocBin()
+        for d in self.patterns:
+            db.add(d)
+        db.to_disk(data_path)
+
+    def from_disk(self, path, exclude=tuple()):
+        # This will receive the directory path + /my_component
+        data_path = path / "patterns.spacy"
+        self.patterns = list(DocBin().from_disk(data_path).get_docs(self.vocab))
+        return self
+    
+    def __call__(self, doc: Doc):
+        matches = self.matcher(doc, as_spans=True)
         doc.ents = filter_spans(list(doc.ents) + matches)
         return doc
     
-    return match_gpes
+
+@Language.factory("gpe_matcher")
+class GPEMatcher(MatcherBase):
+    def from_disk(self, path, exclude=tuple()):
+        super().from_disk(path, exclude)
+        self.matcher = PhraseMatcher(self.vocab)
+        self.matcher.add("GPE", self.patterns)
+        return self
+
+    def initialize(self, get_examples=None, nlp=None, comm_area_path: str=None, neighborhood_path: str=None):
+        gpes = pd.concat([gpd.read_parquet(comm_area_path)['community_name'].rename('name'),
+                            pd.read_csv(neighborhood_path)['name'],
+                            pd.Series(sides)], ignore_index=True)
+        gpes = gpes.str.split(",", expand=False).explode()
+        gpes = gpes.str.title().drop_duplicates().sort_values()
+        
+        self.matcher = PhraseMatcher(self.vocab)
+        self.patterns = list(nlp.tokenizer.pipe(gpes))
+        self.matcher.add("GPE", self.patterns)    
     
 @Language.factory("street_matcher")
-def register_street_matcher(nlp, name, street_name_path=None):
-    street_names = pd.read_csv(street_name_path)
-    street_names = street_names.filter(like='combined').melt()['value']
-    street_names = street_names.str.title().drop_duplicates().sort_values()
+class StreetMatcher(MatcherBase):
+    def from_disk(self, path, exclude=tuple()):
+        super().from_disk(path, exclude)
+        self.matcher = PhraseMatcher(self.vocab)
+        self.matcher.add("GPE", self.patterns)
+        return self
 
-    loc_matcher = PhraseMatcher(nlp.vocab)
-    patterns = list(nlp.tokenizer.pipe(street_names))
-    loc_matcher.add("FAC", patterns)
+    def initialize(self, get_examples=None, nlp=None, street_name_path: str=None):
+        street_names = pd.read_csv(street_name_path)
+        street_names = street_names.filter(like='combined').melt()['value']
+        street_names = street_names.str.title().drop_duplicates().sort_values()
 
-    def match_streets(doc: Doc):
-        matches = loc_matcher(doc, as_spans=True)
-        doc.ents = filter_spans(list(doc.ents) + matches)
-        return doc
-        
-    return match_streets
+        self.matcher = PhraseMatcher(self.vocab)
+        self.patterns = list(nlp.tokenizer.pipe(street_names))
+        self.matcher.add("FAC", self.patterns)
 
 @Language.factory("age_matcher")
-def register_age_matcher(nlp, name):
-    matcher = Matcher(nlp.vocab) # Matcher might not be the right thing here since it operates on tokens
-    matcher.add("CARDINAL", [[{"TEXT": {"REGEX": r"\d+[ -]year[ -]old"}}]])
-    
-    def match_age(doc: Doc):
-        matches = matcher(doc, as_spans=True)
+class AgeMatcher:
+    def __init__(self, nlp, name: str):
+        self.name = name
+        self.matcher = Matcher(nlp.vocab)
+        self.pattern = {"TEXT": {"REGEX": r"\d+[ -]year[ -]old"}}
+        self.matcher.add("CARDINAL", [[self.pattern]])
+
+    def __call__(self, doc: Doc):
+        matches = self.matcher(doc, as_spans=True)
         doc.ents = filter_spans(list(doc.ents) + matches)
         return doc
 
-    return match_age
-
 @Language.component("block_matcher")
-def expand_street_blocks(doc: Doc):
+def block_matcher(doc: Doc):
     new_ents = []
     for idx, ent in enumerate(doc.ents):
         # Only check for title if it's a person and not the first token
@@ -74,7 +105,7 @@ def expand_street_blocks(doc: Doc):
     return doc
 
 @Language.component("intersection_matcher")
-def expand_intersections(doc: Doc):
+def intersection_matcher(doc: Doc):
     new_ents = []
     for idx, ent in enumerate(doc.ents):
         # Only check for title if it's a person and not the first token
