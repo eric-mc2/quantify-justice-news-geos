@@ -41,17 +41,20 @@ def train(train_path, dev_path, full_cfg, model_path, overrides: dict[str,Any] =
         command += f" --{key} {val}"
     cmd(command, "Training time: {:.1f}s")
 
-def load_metrics(model_path):
+def load_metrics(model_path, task='textcat'):
     best_model_path = os.path.join(model_path, "model-best")
     metric_file = os.path.join(best_model_path, "meta.json")
     with open(metric_file) as fp:
         metrics = json.load(fp)
-    return score_metrics(metrics)
+    return score_metrics(metrics, task)
 
-def score_metrics(metrics):
-    keys = ['cats_micro_p','cats_micro_r','cats_micro_f',
+def score_metrics(metrics, task="textcat"):
+    if task == "textcat":
+        keys = ['cats_micro_p','cats_micro_r','cats_micro_f',
             'cats_macro_p','cats_macro_r','cats_macro_f',
             'cats_f_per_type','cats_auc_per_type','cats_score']
+    elif task == "ner":
+        keys = ['ents_f','ents_p','ents_r','ents_per_type','ner_loss']
     out_metrics = {}
     for key in keys:
         if key in metrics['performance']:

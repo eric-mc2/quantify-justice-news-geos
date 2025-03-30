@@ -10,11 +10,12 @@ from spacy.matcher.matcher import Matcher
 from scripts.geoms.operations import sides
 
 class MatcherBase:
-    def __init__(self, nlp, name: str):
+    def __init__(self, nlp, name: str, overwrite: bool=False):
         self.name = name
         self.matcher = None
         self.patterns = None
         self.vocab = nlp.vocab
+        self.overwrite = overwrite
 
     def to_disk(self, path, exclude=tuple()):
         # This will receive the directory path + /my_component
@@ -33,8 +34,12 @@ class MatcherBase:
         self.patterns = list(DocBin().from_disk(data_path).get_docs(self.vocab))
         return self
     
+    def _skip(self, doc: Doc, match: Span):
+        return any(t.ent_type for t in doc[match.start:match.end]) and not self.overwrite
+
     def __call__(self, doc: Doc):
         matches = self.matcher(doc, as_spans=True)
+        matches = [m for m in matches if not self._skip(doc, m)]
         doc.ents = filter_spans(list(doc.ents) + matches)
         return doc
     
@@ -63,7 +68,7 @@ class StreetMatcher(MatcherBase):
     def from_disk(self, path, exclude=tuple()):
         super().from_disk(path, exclude)
         self.matcher = PhraseMatcher(self.vocab)
-        self.matcher.add("GPE", self.patterns)
+        self.matcher.add("FAC", self.patterns)
         return self
 
     def initialize(self, get_examples=None, nlp=None, street_name_path: str=None):
@@ -75,16 +80,39 @@ class StreetMatcher(MatcherBase):
         self.patterns = list(nlp.tokenizer.pipe(street_names))
         self.matcher.add("FAC", self.patterns)
 
+@Language.component("street_to_neighborhood")
+def street_to_neighborhood(doc: Doc):
+    # Fix street names that are actually neighborhoods
+    new_ents = []
+    for idx, ent in enumerate(doc.ents):
+        if ent.label_ == "FAC" and (ent.end != len(doc.ents)):
+            next_token = doc[ent.end]
+            # Must match [FAC] neighborhood
+            if next_token.text == "neighborhood":
+                new_ent = Span(doc, ent.start, ent.end, label="GPE")
+                new_ents.append(new_ent)
+            else:
+                new_ents.append(ent)
+        else:
+            new_ents.append(ent)
+    doc.ents = new_ents
+    return doc
+
 @Language.factory("age_matcher")
 class AgeMatcher:
-    def __init__(self, nlp, name: str):
+    def __init__(self, nlp, name: str, overwrite: bool=False):
         self.name = name
         self.matcher = Matcher(nlp.vocab)
         self.pattern = {"TEXT": {"REGEX": r"\d+[ -]year[ -]old"}}
         self.matcher.add("CARDINAL", [[self.pattern]])
+        self.overwrite = overwrite
+
+    def _skip(self, doc: Doc, match: Span):
+        return any(t.ent_type for t in doc[match.start:match.end]) and not self.overwrite
 
     def __call__(self, doc: Doc):
         matches = self.matcher(doc, as_spans=True)
+        matches = [m for m in matches if not self._skip(doc, m)]
         doc.ents = filter_spans(list(doc.ents) + matches)
         return doc
 

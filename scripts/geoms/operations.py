@@ -98,6 +98,11 @@ def clean_street_names(in_file, out_file) -> pd.DataFrame:
     df['combined_name_4'] = df['dir_exp'] + " " + df['Street'] + " " + df['Suffix']
     df['combined_name_5'] = df['dir_exp'] + " " + df['Street'] + " " + df['suf_exp']
     df['combined_name_6'] = df['dir_exp'] + " " + df['Street']
+    df['combined_name_7'] = df['Street'] + " " + df['Suffix']
+    df['combined_name_8'] = df['Street'] + " " + df['suf_exp']
+    # do NOT uncomment! [Street] by itself would be WAY to many false positives
+    # e.g. [North] Ave, [Western] Ave, [Chicago] Ave, etc
+    # df['combined_name_9'] = df['Street'] 
     df.to_csv(out_file, index=False)
     return df
 

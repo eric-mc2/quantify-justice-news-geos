@@ -108,7 +108,8 @@ def train(base_cfg,
           out_path, 
           comm_area_path,
           neighborhood_path,
-          street_path):
+          street_path, 
+          overrides = {}):
     cfg = Config().from_disk(base_cfg)
     cfg['initialize']['components']['gpe_matcher']['comm_area_path'] = comm_area_path
     cfg['initialize']['components']['gpe_matcher']['neighborhood_path'] = neighborhood_path
@@ -125,6 +126,6 @@ def train(base_cfg,
 
     init_config(base_cfg, full_cfg, code_path)
     # init_labels(full_cfg, label_path, code_path)
-    train_spacy(train_path, dev_path, full_cfg, out_path, {"code": code_path})
+    train_spacy(train_path, dev_path, full_cfg, out_path, overrides | {"code": code_path})
     # metrics = load_metrics(out_path)
     # return metrics

@@ -89,8 +89,13 @@ def annotate():
         }
     )
 
-@dg_asset(deps=[labels_train_key, labels_dev_key],
-          description="Train sentence relevance classifier")
+streets_key = dg.AssetKey(["geoms",'street_names'])
+comms_key = dg.AssetKey(["geoms","comm_areas"])
+neighbor_key = dg.AssetKey(["geoms", "neighborhoods"])
+
+@dg_asset(deps=[labels_train_key, labels_dev_key,
+                streets_key, comms_key, neighbor_key],
+          description="Train NER")
 def train():
     train_path = config.get_data_path("entity_recognition.labels_train")
     dev_path = config.get_data_path("entity_recognition.labels_dev")
@@ -111,11 +116,11 @@ def train():
                         street_name_path)
     return dg.MaterializeResult(metadata=metrics)
 
-# TODO: Continue implementing language components:
-# read https://spacy.io/usage/processing-pipelines#component-data-initialization
-# and read https://spacy.io/usage/training#config
-# Not sure if i want to make it an assset or just as part of train op.
-
+# @dg_asset(deps=[labels_train_key, labels_dev_key,
+#             streets_key, comms_key, neighbor_key],
+#         description="Run NER")
+# def label():
+#     pass
 
 
 # NOTE: A good way to make this half-idempotent is to have a "sink" version
