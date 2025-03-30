@@ -25,3 +25,10 @@ def dagster_dev():
     env["DAGSTER_HOME"] = Config().get_file_path("dagster.dagster_home")
     args = sys.argv[1:]
     cmd("dagster dev".split(" " ) + args, env=env)
+
+def dg_standard_table(df: pd.DataFrame, meta: dict = {}):
+    standard_meta = {
+        "dagster/column_schema": dg_table_schema(df),
+        "dagster/row_count": len(df)
+        }
+    return dg.MaterializeResult(metadata = standard_meta | meta)

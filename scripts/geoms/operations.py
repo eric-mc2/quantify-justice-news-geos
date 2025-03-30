@@ -211,3 +211,23 @@ def clean_neighborhoods(in_file, out_file) -> pd.Series:
     names = names.str.title().drop_duplicates().rename('name')
     names.to_csv(out_file, index=False)
     return names
+
+def map_blocks(street_block_file, comm_area_file, out_file):
+    df = gpd.read_parquet(street_block_file)
+    comm_areas = gpd.read_parquet(comm_area_file)
+    
+    df = df.sjoin(comm_areas[['community_name','geometry']],
+                    how='inner',
+                    predicate='intersects',
+                    lsuffix='street',
+                    rsuffix='comm').drop(columns=['index_comm','geometry'])
+    
+    df = (df.melt(id_vars=['community_name'],
+                   value_vars=['block_name1', 'block_name2', 'block_name3', 'block_name4'],
+                   var_name='exp',
+                   value_name='block_name')
+                .drop(columns=['exp'])
+                .drop_duplicates())
+    
+    df[['block_name','community_name']].to_parquet(out_file)
+    return df

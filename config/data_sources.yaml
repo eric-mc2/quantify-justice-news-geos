@@ -41,6 +41,7 @@ geoms:
   parks: "geoms/parks.csv"
   landmarks: "geoms/landmarks.parquet"
   hospitals: "geoms/hospitals.parquet"
+  block_labels: "geoms/block_labels.parquet"
 
 entity_recognition:
   explore: "entity_recognition/explore.spacy"
