@@ -1,9 +1,6 @@
 import pandas as pd
-from pathlib import Path
-from tempfile import NamedTemporaryFile
 
 import spacy 
-from spacy.cli import apply
 from spacy.tokens import DocBin
 
 from scripts.utils import preprocessing as pre
@@ -12,12 +9,11 @@ from scripts.utils.spacy import (load_spacy,
                                  load_metrics,
                                  train as train_spacy)
 from scripts.utils.labelstudio import extract as extract_ls
-from scripts.art_relevance.operations import filter as art_filter
 from scripts.utils.logging import setup_logger
 
 logger = setup_logger(__name__)
 
-def preprocess(in_path, base_model, out_path):
+def pre_inference(in_path, base_model):
     logger.debug("Concatenating text.")
     article_data = pd.read_parquet(in_path)
     article_data['text'] = article_data['title'] + "\n.\n" + article_data['bodytext']
@@ -39,8 +35,10 @@ def preprocess(in_path, base_model, out_path):
                 .explode('docs'))
     sentences = article_data['docs'].apply(pd.Series)
     sentences.columns = ['sentence_idx', 'sentence']
-    article_data = pd.concat([article_data.drop(columns=['docs']), sentences], axis=1)
+    return pd.concat([article_data.drop(columns=['docs']), sentences], axis=1)
     
+def pre_annotate(in_path, base_model, out_path):
+    article_data = pre_inference(in_path, base_model)
     logger.debug("Writing to disk.")
     article_data.to_json(out_path, orient='records', index=False, force_ascii=True)
     return article_data
@@ -76,36 +74,21 @@ def split(in_path, train_path, dev_path, test_path):
     _to_docbin(train, all_labels, train_path)
     _to_docbin(dev, all_labels, dev_path)
     _to_docbin(test, all_labels, test_path)
+    return train, dev, test
 
-def train(base_cfg, full_cfg, train_path, dev_path, out_path, overrides=None):
+def train(base_cfg, full_cfg, train_path, dev_path, out_path, overrides={}):
     init_config(base_cfg, full_cfg)
     train_spacy(train_path, dev_path, full_cfg, out_path, overrides)
     metrics = load_metrics(out_path)
     return metrics
 
-def filter(art_model, sent_model, seed, in_data_path, out_data_path):
-    with (NamedTemporaryFile("wb", suffix=".parquet") as f1,
-          NamedTemporaryFile("wb", suffix=".json") as f2):
-        art_filter(art_model, in_data_path, f1.name, 600, seed)
-        f1.seek(0)
-        df_orig = preprocess(f1.name, sent_model, f2.name)
-
-    nlp = spacy.load(sent_model)
-    with (NamedTemporaryFile("wb", suffix=".spacy") as f1,
-        NamedTemporaryFile("wb", suffix=".spacy") as f2):
-        _to_docbin(df_orig, [], f1.name)
-        f1.seek(0)
-        apply(data_path=Path(f1.name), 
-            output_file=Path(f2.name), 
-            model=sent_model, 
-            json_field="text", 
-            batch_size=1,
-            n_process=1)
-        f2.seek(0)
-        docs = list(DocBin().from_disk(f2.name).get_docs(nlp.vocab))
+def inference(in_data_path, model_path, out_data_path):
+    df = pre_inference(in_data_path, model_path)
+    nlp = spacy.load(model_path)
+    docs = list(nlp.pipe(df['sentence']))
     relevant = [any(map(lambda x: x[0] != 'IRRELEVANT' and x[1]>.5, d.cats.items())) for d in docs]
-    relevant = pd.Series(relevant, index=df_orig.index)
-    cats = pd.Series([d.cats for d in docs], index=df_orig.index).apply(pd.Series)
-    result = pd.concat([df_orig[relevant], cats[relevant]], axis=1)
+    relevant = pd.Series(relevant, index=df.index)
+    cats = pd.Series([d.cats for d in docs], index=df.index).apply(pd.Series)
+    result = pd.concat([df[relevant], cats[relevant]], axis=1)
     result.to_parquet(out_data_path)
     return result

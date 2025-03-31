@@ -29,7 +29,7 @@ def annotate():
     in_path = config.get_data_path("art_relevance.article_text_labeled_verbose")
     out_path = config.get_data_path("art_relevance.article_text_labeled")
     df = ops.annotate(in_path, out_path)
-    return dg_standard_table(df, {
+    return dg_standard_table(df, meta = {
         "pct_positive": float((df['label'] == 'CRIME').mean())
     })
 
@@ -43,6 +43,7 @@ split_test_key = dg.AssetKey([PREFIX, "split_test"])
             "split_test": dg_asset_out(description="Eval data")
     },
     deps = [annotate],
+    name = "_".join([PREFIX, "split"])
 )
 def split():
     in_path = config.get_data_path("art_relevance.article_text_labeled")
