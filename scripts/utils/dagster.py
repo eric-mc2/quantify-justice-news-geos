@@ -26,9 +26,9 @@ def dagster_dev():
     args = sys.argv[1:]
     cmd("dagster dev".split(" " ) + args, env=env)
 
-def dg_standard_table(df: pd.DataFrame, meta: dict = {}):
+def dg_standard_table(df: pd.DataFrame, meta: dict = {}, **kwargs):
     standard_meta = {
         "dagster/column_schema": dg_table_schema(df),
         "dagster/row_count": len(df)
         }
-    return dg.MaterializeResult(metadata = standard_meta | meta)
+    return dg.MaterializeResult(metadata = standard_meta | meta, **kwargs)

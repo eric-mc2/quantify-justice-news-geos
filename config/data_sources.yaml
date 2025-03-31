@@ -11,9 +11,8 @@ pre_relevance:
   article_text_filtered: "pre_relevance/articles.parquet"
 
 art_relevance:
-  article_text_prototype: "art_relevance/articles_prototype.parquet"
   # This is JSON because Label-Studio doesn't accept jsonl!
-  article_text_preproc: "art_relevance/articles_preproc.json"
+  article_text_pre_annotate: "art_relevance/articles_pre_annotate.json"
   article_text_labeled_verbose: "art_relevance/articles_labeled_verbose.json"
   article_text_labeled: "art_relevance/articles_labeled.jsonl"
   article_text_train: "art_relevance/articles_train.spacy"
@@ -23,7 +22,7 @@ art_relevance:
 
 sent_relevance:
   # This is JSON because Label-Studio doesn't accept jsonl!
-  article_text_preproc: "sent_relevance/articles_preproc.json"
+  article_text_pre_annotate: "sent_relevance/articles_pre_annotate.json"
   article_text_labeled_verbose: "sent_relevance/articles_labeled_verbose.json"
   article_text_labeled: "sent_relevance/articles_labeled.jsonl"
   article_text_train: "sent_relevance/articles_train.spacy"
@@ -54,3 +53,4 @@ entity_recognition:
   labels_dev_verbose: "entity_recognition/labels_dev_verbose.json"
   labels_train: "entity_recognition/labels_train.spacy"
   labels_dev: "entity_recognition/labels_dev.spacy"
+  inference: "entity_recognition/predictions.spacy"
