@@ -14,6 +14,7 @@ sent_relevance:
   trained_model: "models/sent_relevance/"
   optuna_db: "sqlite:///optuna.sqlite3"
   proto_seed: 31925
+  k: 600
 
 dagster:
   dagster_home: ".dagster_home"
@@ -24,3 +25,5 @@ entity_recognition:
   base_cfg: "scripts/entity_recognition/spacy_base_config.cfg"
   full_cfg: "scripts/entity_recognition/spacy_config.cfg"
   trained_model: "models/entity_recognition/"
+  proto_seed: 32025
+  k: 600

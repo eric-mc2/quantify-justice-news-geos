@@ -47,7 +47,7 @@ split_test_key = dg.AssetKey([PREFIX, "split_test"])
            "split_test": dg_asset_out(description="Eval data")
     }, 
     deps = [annotate], 
-    name = "_".join([PREFIX, "split"])
+    name = dg.AssetKey([PREFIX, "split"]).to_python_identifier()
 )
 def split():
     in_path = config.get_data_path("sent_relevance.article_text_labeled")

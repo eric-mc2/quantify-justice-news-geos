@@ -80,8 +80,8 @@ class StreetMatcher(MatcherBase):
         self.patterns = list(nlp.tokenizer.pipe(street_names))
         self.matcher.add("FAC", self.patterns)
 
-@Language.component("street_to_neighborhood")
-def street_to_neighborhood(doc: Doc):
+@Language.component("street_vs_neighborhood")
+def street_vs_neighborhood(doc: Doc):
     # Fix street names that are actually neighborhoods
     new_ents = []
     for idx, ent in enumerate(doc.ents):

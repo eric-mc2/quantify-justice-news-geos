@@ -90,5 +90,5 @@ def inference(in_data_path, model_path, out_data_path):
     relevant = pd.Series(relevant, index=df.index)
     cats = pd.Series([d.cats for d in docs], index=df.index).apply(pd.Series)
     result = pd.concat([df[relevant], cats[relevant]], axis=1)
-    result.to_parquet(out_data_path)
+    _to_docbin(result, [], out_data_path)
     return result

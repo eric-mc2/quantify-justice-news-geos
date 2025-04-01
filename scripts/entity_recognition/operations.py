@@ -2,11 +2,14 @@ import pandas as pd
 import json 
 from dataclasses import asdict
 import os
+from pathlib import Path
 
 import spacy
-from spacy.tokens import DocBin
+from spacy.tokens import DocBin, Doc
 from spacy.util import filter_spans
 from thinc.api import Config
+from spacy.language import Language
+from spacy.cli import apply as spacy_infer
 
 from scripts.utils.labelstudio import (extract as extract_ls,
                                        LSDoc, LSData, LSPrediction,
@@ -14,9 +17,9 @@ from scripts.utils.labelstudio import (extract as extract_ls,
 from scripts.utils import preprocessing as pre
 from scripts.utils.spacy import (load_spacy, 
                                  init_config, 
-                                 init_labels,
                                  train as train_spacy)
 from scripts.utils.logging import setup_logger
+from scripts.entity_recognition.components import (block_matcher, intersection_matcher, street_vs_neighborhood)
 
 logger = setup_logger(__name__)
 
@@ -129,3 +132,19 @@ def train(base_cfg,
     train_spacy(train_path, dev_path, full_cfg, out_path, overrides | {"code": code_path})
     # metrics = load_metrics(out_path)
     # return metrics
+
+def inference(in_path, model_path, out_path):
+    Language.component('block_matcher', func=block_matcher)
+    Language.component('intersection_matcher', func=intersection_matcher)
+    Language.component('street_vs_neighborhood', func=street_vs_neighborhood)
+    spacy_infer(Path(in_path), Path(out_path), model_path, None, 1, 1)
+    docs = list(DocBin().from_disk(out_path).get_docs(spacy.load(model_path).vocab))
+    logger.debug("n docs: {}".format(len(docs)))
+    def _has_ent(doc: Doc):
+        return any([e.label_ in ["FAC","GPE","LOC","PERSON"] for e in doc.ents])
+    docs = list(filter(_has_ent, docs))
+    logger.debug("n docs: {}".format(len(docs)))
+    db = DocBin()
+    for doc in docs:
+        db.add(doc)
+    db.to_disk(out_path)

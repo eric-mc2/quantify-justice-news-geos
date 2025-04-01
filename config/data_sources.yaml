@@ -28,7 +28,7 @@ sent_relevance:
   article_text_train: "sent_relevance/articles_train.spacy"
   article_text_dev: "sent_relevance/articles_dev.spacy"
   article_text_test: "sent_relevance/articles_test.spacy"
-  article_text_filtered: "sent_relevance/articles_filtered.parquet"
+  article_text_filtered: "sent_relevance/articles_filtered.spacy"
   
 geoms:
   comm_areas: "geoms/comm_areas.parquet"
@@ -43,7 +43,8 @@ geoms:
   block_labels: "geoms/block_labels.parquet"
 
 entity_recognition:
-  explore: "entity_recognition/explore.spacy"
+  # Splitting first because only want to look at train data when
+  # developing heurstics for NER.
   article_text_train: "entity_recognition/articles_train.spacy"
   article_text_dev: "entity_recognition/articles_dev.spacy"
   article_text_test: "entity_recognition/articles_test.spacy"
