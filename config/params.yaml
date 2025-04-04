@@ -27,3 +27,6 @@ entity_recognition:
   trained_model: "models/entity_recognition/"
   proto_seed: 32025
   k: 600
+
+neighborhood_clf:
+  base_model: "en_core_web_sm"

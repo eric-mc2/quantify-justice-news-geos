@@ -2,6 +2,7 @@ import dagster as dg
 import pandas as pd
 import os
 import sys
+from spacy.tokens import Doc
 from scripts.utils.config import Config
 from scripts.utils.runners import cmd
 
@@ -30,5 +31,11 @@ def dg_standard_table(df: pd.DataFrame, meta: dict = {}, **kwargs):
     standard_meta = {
         "dagster/column_schema": dg_table_schema(df),
         "dagster/row_count": len(df)
+        }
+    return dg.MaterializeResult(metadata = standard_meta | meta, **kwargs)
+
+def dg_standard_doc(docs: list[Doc], meta: dict = {}, **kwargs):
+    standard_meta = {
+        "dagster/row_count": len(docs)
         }
     return dg.MaterializeResult(metadata = standard_meta | meta, **kwargs)
