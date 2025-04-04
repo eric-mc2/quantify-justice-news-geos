@@ -56,7 +56,7 @@ def split():
     yield dg_standard_table(test, asset_key=split_test_key)
 
 
-@dg_asset(deps=[split_train_key, split_dev_key, split_test_key],
+@dg_asset(deps=[split_train_key, split_dev_key],
           description="Train article relevance classifier")
 def train():
     train_path = config.get_data_path("art_relevance.article_text_train")

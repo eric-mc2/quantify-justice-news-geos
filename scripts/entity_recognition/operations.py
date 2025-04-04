@@ -139,12 +139,9 @@ def inference(in_path, model_path, out_path):
     Language.component('street_vs_neighborhood', func=street_vs_neighborhood)
     spacy_infer(Path(in_path), Path(out_path), model_path, None, 1, 1)
     docs = list(DocBin().from_disk(out_path).get_docs(spacy.load(model_path).vocab))
-    logger.debug("n docs: {}".format(len(docs)))
-    def _has_ent(doc: Doc):
-        return any([e.label_ in ["FAC","GPE","LOC","PERSON"] for e in doc.ents])
-    docs = list(filter(_has_ent, docs))
-    logger.debug("n docs: {}".format(len(docs)))
-    db = DocBin()
+    crime_ents = ["FAC","GPE","LOC","PERSON"]
+    docs = [d for d in docs if any([e.label_ in crime_ents for e in d.ents])]
+    db = DocBin(store_user_data=True)
     for doc in docs:
         db.add(doc)
     db.to_disk(out_path)

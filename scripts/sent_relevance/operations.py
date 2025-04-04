@@ -51,15 +51,23 @@ def annotate(in_path, out_path):
     data.to_json(out_path, lines=True, orient="records", index=False)
     return data
 
-def _to_docbin(df, all_labels, out_path):
+def _to_docbin(df, all_labels, out_path, mode='train'):
     nlp = spacy.blank("en")
-    doc_bin = DocBin()
+    doc_bin = DocBin(store_user_data=True)
     text = df['sentence']
-    meta = df.drop(columns='sentence')
-    data_tuples = ((t,m) for t,m in zip(text, meta.itertuples()))
-    for doc, eg in nlp.pipe(data_tuples, as_tuples=True):
-        for label in all_labels:
-            doc.cats[label] = 1 if label in eg.multilabel else 0
+    metadata = df.drop(columns='sentence')
+    data_tuples = ((t,m) for t,m in zip(text, metadata.itertuples(index=False)))
+    for doc, meta in nlp.pipe(data_tuples, as_tuples=True):
+        metadict = meta._asdict()
+        if mode == 'train':
+            for label in all_labels:
+                doc.cats[label] = 1 if label in meta.multilabel else 0
+            del metadict['multilabel']
+        else:
+            for label in all_labels:
+                doc.cats[label] = metadict[label]
+                del metadict[label]
+        doc.user_data |= metadict
         doc_bin.add(doc)
     doc_bin.to_disk(out_path)
 
@@ -90,5 +98,5 @@ def inference(in_data_path, model_path, out_data_path):
     relevant = pd.Series(relevant, index=df.index)
     cats = pd.Series([d.cats for d in docs], index=df.index).apply(pd.Series)
     result = pd.concat([df[relevant], cats[relevant]], axis=1)
-    _to_docbin(result, [], out_data_path)
+    _to_docbin(result, list(cats.columns), out_data_path, mode='inference')
     return result
