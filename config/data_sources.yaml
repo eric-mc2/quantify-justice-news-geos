@@ -37,6 +37,7 @@ geoms:
   street_segs: "geoms/street_segments.parquet"
   street_blocks: "geoms/street_blocks.parquet"
   street_intersections: "geoms/street_crosses.parquet"
+  street_intersection_points: "geoms/street_cross_points.parquet"
   parks: "geoms/parks.csv"
   landmarks: "geoms/landmarks.parquet"
   hospitals: "geoms/hospitals.parquet"

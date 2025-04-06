@@ -44,6 +44,13 @@ def intersections():
     df = ops.create_intersections(in_file, out_file)
     return dg_standard_table(df)
 
+@dg_asset(deps=[street_segs])
+def intersection_points():
+    in_file = config.get_data_path("geoms.street_segs")
+    out_file = config.get_data_path("geoms.street_intersection_points")
+    df = ops.create_intersection_geoms(in_file, out_file)
+    return dg_standard_table(df)
+
 @dg_asset()
 def hospitals():
     out_file = config.get_data_path("geoms.hospitals")
@@ -71,12 +78,22 @@ def map_blocks():
     df = ops.map_blocks(street_block_file, comm_area_file, out_file)
     return dg_standard_table(df)
 
+@dg_asset(deps=[intersection_points, comm_areas])
+def map_intersections():
+    int_file = config.get_data_path("geoms.street_intersection_points")
+    comm_area_file = config.get_data_path("geoms.comm_areas")
+    out_file = config.get_data_path("geoms.intersection_labels")
+    df = ops.map_intersections(int_file, comm_area_file, out_file)
+    return dg_standard_table(df)
+
 defs = dg.Definitions(assets=[comm_areas,
                               street_segs,
                               street_names,
                               blocks,
                               intersections,
+                              intersection_points,
                               hospitals,
                               landmarks,
                               neighborhoods,
-                              map_blocks])
+                              map_blocks,
+                              map_intersections])
