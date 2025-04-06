@@ -41,6 +41,12 @@ def train(train_path, dev_path, full_cfg, model_path, overrides: dict[str,Any] =
         command += f" --{key} {val}"
     cmd(command, "Training time: {:.1f}s")
 
+def assemble(full_cfg, model_path, overrides: dict[str,Any] = {}):
+    command = f"""python -m spacy assemble {full_cfg} {model_path}"""
+    for key,val in overrides.items():
+        command += f" --{key} {val}"
+    cmd(command)
+
 def load_metrics(model_path, task='textcat'):
     best_model_path = os.path.join(model_path, "model-best")
     metric_file = os.path.join(best_model_path, "meta.json")

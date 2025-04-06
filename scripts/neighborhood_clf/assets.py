@@ -35,72 +35,81 @@ split_test_key = dg.AssetKey([PREFIX, "split_test"])
 )
 def split():
     in_path = config.get_data_path("neighborhood_clf.articles")
+    model = config.get_param("neighborhood_clf.base_model")
     train_path = config.get_data_path("neighborhood_clf.train")
     dev_path = config.get_data_path("neighborhood_clf.dev")
     test_path = config.get_data_path("neighborhood_clf.test")
-    train, dev, test = ops.split(in_path, train_path, dev_path, test_path)
+    train, dev, test = ops.split(in_path, model, train_path, dev_path, test_path)
     yield dg_standard_doc(train, asset_key=split_train_key)
     yield dg_standard_doc(dev, asset_key=split_dev_key)
     yield dg_standard_doc(test, asset_key=split_test_key)
 
-@dg_asset(deps=[split_train_key], description="Normalize text for labeling")
-def pre_annotate_train():
-    in_path = config.get_data_path("neighborhood_clf.train")
-    out_path = config.get_data_path("neighborhood_clf.pre_annotate_train")
-    df = ops.pre_annotate(in_path, out_path)
-    return dg_standard_table(df)
+# @dg_asset(deps=[split_train_key], description="Normalize text for labeling")
+# def pre_annotate_train():
+#     in_path = config.get_data_path("neighborhood_clf.train")
+#     model = config.get_param("neighborhood_clf.base_model")
+#     out_path = config.get_data_path("neighborhood_clf.pre_annotate_train")
+#     df = ops.pre_annotate(in_path, model, out_path)
+#     return dg_standard_table(df)
 
-@dg_asset(deps=[split_dev_key], description="Normalize text for labeling")
-def pre_annotate_dev():
-    in_path = config.get_data_path("neighborhood_clf.dev")
-    out_path = config.get_data_path("neighborhood_clf.pre_annotate_dev")
-    df = ops.pre_annotate(in_path, out_path)
-    return dg_standard_table(df)
+# @dg_asset(deps=[split_dev_key], description="Normalize text for labeling")
+# def pre_annotate_dev():
+#     in_path = config.get_data_path("neighborhood_clf.dev")
+#     model = config.get_param("neighborhood_clf.base_model")
+#     out_path = config.get_data_path("neighborhood_clf.pre_annotate_dev")
+#     df = ops.pre_annotate(in_path, model, out_path)
+#     return dg_standard_table(df)
 
-@dg_asset(deps=[pre_annotate_train], description="Manually label in Label Studio")
-def annotate_train():
-    # Creating the verbose labels is a manual process! 
-    # Used Label Studio on preprocessed outs.
-    in_path = config.get_data_path("neighborhood_clf.labeled_verbose_train")
-    out_path = config.get_data_path("neighborhood_clf.labeled_train")
-    df = ops.annotate(in_path, out_path)
-    return dg_standard_table(df)
+# @dg_asset(deps=[pre_annotate_train], description="Manually label in Label Studio")
+# def annotate_train():
+#     # Creating the verbose labels is a manual process! 
+#     # Used Label Studio on preprocessed outs.
+#     in_path = config.get_data_path("neighborhood_clf.labeled_verbose_train")
+#     out_path = config.get_data_path("neighborhood_clf.labeled_train")
+#     df = ops.annotate(in_path, out_path)
+#     return dg_standard_table(df)
 
-@dg_asset(deps=[pre_annotate_dev], description="Manually label in Label Studio")
-def annotate_dev():
-    # Creating the verbose labels is a manual process! 
-    # Used Label Studio on preprocessed outs.
-    in_path = config.get_data_path("neighborhood_clf.labeled_verbose_dev")
-    out_path = config.get_data_path("neighborhood_clf.labeled_dev")
-    df = ops.annotate(in_path, out_path)
-    return dg_standard_table(df)
+# @dg_asset(deps=[pre_annotate_dev], description="Manually label in Label Studio")
+# def annotate_dev():
+#     # Creating the verbose labels is a manual process! 
+#     # Used Label Studio on preprocessed outs.
+#     in_path = config.get_data_path("neighborhood_clf.labeled_verbose_dev")
+#     out_path = config.get_data_path("neighborhood_clf.labeled_dev")
+#     df = ops.annotate(in_path, out_path)
+#     return dg_standard_table(df)
 
-@dg_asset(deps=[annotate_train, annotate_dev],
+@dg_asset(deps=[split_train_key, split_dev_key],
           description="Train article relevance classifier")
 def train():
-    train_path = config.get_data_path("neighborhood_clf.labeled_train")
-    dev_path = config.get_data_path("neighborhood_clf.labeled_dev")
-    base_cfg = config.get_param("neighborhood_clf.base_cfg")
-    full_cfg = config.get_param("neighborhood_clf.full_cfg")
-    out_path = config.get_param("neighborhood_clf.trained_model")
-    metrics = ops.train(base_cfg, full_cfg, train_path, dev_path, out_path)
-    return dg.MaterializeResult(metadata=metrics)
+    train_path = config.get_data_path("neighborhood_clf.train")
+    dev_path = config.get_data_path("neighborhood_clf.dev")    
+    # train_path = config.get_data_path("neighborhood_clf.labeled_train")
+    # dev_path = config.get_data_path("neighborhood_clf.labeled_dev")
+    base_cfg = config.get_file_path("neighborhood_clf.base_cfg")
+    full_cfg = config.get_file_path("neighborhood_clf.full_cfg")
+    out_path = config.get_file_path("neighborhood_clf.trained_model")
+    out_path = os.path.join(out_path, "model-best")
+    neighborhood_path = config.get_data_path("geoms.comm_areas")
+    ops.train(base_cfg, full_cfg, train_path, dev_path, out_path, neighborhood_path)
+    # return dg.MaterializeResult(metadata=metrics)
 
-@dg_asset(deps=[prev, train],
+# @dg_asset(deps=[prev, train],
+#           description="Pass original data through ml model")
+@dg_asset(deps=[split_train_key, train],
           description="Pass original data through ml model")
 def inference():
     in_data_path = config.get_data_path("entity_recognition.inference")
     out_data_path = config.get_data_path("neighborhood_clf.inference")
     model_path = config.get_file_path("neighborhood_clf.trained_model")
     best_model_path = os.path.join(model_path, "model-best")
-    df = ops.inference(best_model_path, in_data_path, out_data_path)
-    return dg_standard_table(df)
+    docs = ops.inference(best_model_path, in_data_path, out_data_path)
+    return dg_standard_doc(docs)
 
 defs = dg.Definitions(assets=[join_sentences,
                               split,
-                              pre_annotate_dev,
-                              pre_annotate_train,
-                              annotate_train,
-                              annotate_dev,
+                            #   pre_annotate_dev,
+                            #   pre_annotate_train,
+                            #   annotate_train,
+                            #   annotate_dev,
                               train,
                               inference])
