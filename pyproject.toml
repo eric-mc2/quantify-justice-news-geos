@@ -34,7 +34,6 @@ gitpython = "^3.1.44"
 ipywidgets = "^8.1.5"
 overpass = "^0.7.2"
 pyahocorasick = "^2.1.0"
-pygtrie = "^2.5.0"
 
 [tool.dg]
 is_project = true

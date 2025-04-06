@@ -245,8 +245,11 @@ def map_blocks(street_block_file, comm_area_file, out_file):
 
 def create_intersection_geoms(in_file, out_file):
     df = gpd.read_parquet(in_file)
-    df = df.loc[(df.f_cross.str.count(r'\|') == 4) & (df.t_cross.str.count(r'\|') == 4)]
-    df = df.assign(street_nam_upper = df.street_nam.str.upper(),
+    valid = (df.f_cross.str.count(r'\|') == 4) & (df.t_cross.str.count(r'\|') == 4)
+    logger.debug("Dropping %d rows with invalid cross names", sum(~valid))
+    
+    df = (df.loc[valid]
+          .assign(street_nam_upper = df.street_nam.str.upper(),
                    street_typ_upper = df.street_typ.str.upper(),
                    f_cross_nam = df.f_cross.str.upper().str.split('|', expand=False, regex=False).str[2],
                    f_cross_typ = df.f_cross.str.upper().str.split('|', expand=False, regex=False).str[3],
@@ -260,42 +263,34 @@ def create_intersection_geoms(in_file, out_file):
                    fullname6 = df.pre_dir_exp.fillna('') + " " + df.street_nam.fillna(''),
                    fullname7 = df.street_nam.fillna('') + " " + df.street_typ.fillna(''),
                    fullname8 = df.street_nam.fillna('') + " " + df.street_typ_exp.fillna(''),
-                   fullname9 = df.street_nam.fillna(''))
-    qcuts = [.001,.002,.003,.004,.005,.006,.007,.008,.009,
-            .01,.02,.03,.04,.05,.06,.07,.08,.09,
-            .1,.2,.3,.4,.5,.6,.7,.8,.9]
-    log_intervals = df.index.to_series().quantile(qcuts, 'lower')
-
-    candidates_f = df.merge(df, how='inner', 
+                   fullname9 = df.street_nam.fillna('')))
+    
+    fullname_cols = df.filter(regex=r'fullname\d+').columns.tolist()
+    keep_left = ['street_nam','street_nam_upper','street_typ_upper', 'geometry'] + fullname_cols
+    keep_right = ['f_cross_nam','f_cross_typ','geometry'] + fullname_cols
+    candidates_f = (df[keep_left].merge(df[keep_right], how='inner', 
                             left_on=['street_nam_upper','street_typ_upper'],
                             right_on=['f_cross_nam','f_cross_typ'])
-
-    candidates_t = df.merge(df, how='inner', 
+                    .rename(columns={'f_cross_nam':'cross_nam', 'f_cross_typ':'cross_typ'}))
+    
+    keep_right = ['t_cross_nam','t_cross_typ','geometry'] + fullname_cols
+    candidates_t = (df[keep_left].merge(df[keep_right], how='inner', 
                             left_on=['street_nam_upper','street_typ_upper'],
                             right_on=['t_cross_nam','t_cross_typ'])
-
-
-    crosses = pygtrie.StringTrie()
-    for seg in df.dropna(subset=['street_nam','geometry']).itertuples():
-        if seg.Index in log_intervals.values:
-            logger.debug("Processed {} ({} pct) segments".format(seg.Index, qcuts[log_intervals.searchsorted(seg.Index)]))
-            logger.debug("crosses has {} elems".format(len(crosses)))
-        matchall = pd.Series([True]*len(df), index=df.index)
-        mask1 = matchall if seg.street_nam is None else df.f_cross_nam == seg.street_nam_upper
-        mask2 = matchall if seg.street_typ is None else df.f_cross_typ == seg.street_typ_upper
-        mask4 = matchall if seg.street_nam is None else df.t_cross_nam == seg.street_nam_upper
-        mask5 = matchall if seg.street_typ is None else df.t_cross_typ == seg.street_typ_upper
-        mask = (mask1 & mask2) | (mask4 & mask5) 
-        candidates = df[mask][df[mask].intersects(seg.geometry)]
-        points = candidates.intersection(seg.geometry)
-        candidates = candidates.filter(like='fullname')
-        seg_names = [v for k,v in seg._asdict().items() if 'fullname' in k]
-        for seg_name in seg_names:
-            for candidate,p in zip(candidates.itertuples(index=False), points):
-                for cross_name in candidate:
-                    crosses[seg_name + " and " + cross_name] = p
-    crosses = pd.DataFrame.from_records(crosses.items(), columns=['streets','point'])
-    crosses = gpd.GeoDataFrame(crosses, geometry='point', crs=df.crs)
+                    .rename(columns={'t_cross_nam':'cross_nam', 't_cross_typ':'cross_typ'}))
+    
+    candidates = pd.concat([candidates_f, candidates_t])    
+    candidates = candidates.dropna(subset=['street_nam','geometry_x','geometry_y'])
+    candidates = candidates.loc[candidates.geometry_x.intersects(candidates.geometry_y)]
+    # Checking intersections is O(n) whereas dupe check is O(nlogn) so filter first.
+    candidates = candidates.loc[candidates.index.drop_duplicates()]
+    
+    points = candidates.geometry_x.intersection(candidates.geometry_y).rename('point')
+    cross_left = candidates.filter(regex=r"fullname\d+_x").melt(var_name='variant', value_name='fullname', ignore_index=False)
+    cross_right = candidates.filter(regex=r"fullname\d+_y").melt(var_name='variant', value_name='fullname', ignore_index=False)
+    crosses = cross_left.join(cross_right, how='inner', lsuffix='_x', rsuffix='_y').join(points, how='inner')
+    crosses['cross_name'] = crosses['fullname_x'] + " and " + crosses['fullname_y']
+    crosses = gpd.GeoDataFrame(crosses[['cross_name','point']], geometry='point', crs=df.crs)
     crosses.to_parquet(out_file)
     return crosses
 
