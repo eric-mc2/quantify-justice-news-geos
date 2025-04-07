@@ -70,20 +70,28 @@ def neighborhoods():
     df = ops.clean_neighborhoods(in_file, out_file)
     return dg_standard_table(df)
 
+@dg_asset(deps=[neighborhoods])
+def neighborhood_labels():
+    in_file = config.get_data_path("geoms.neighborhoods")
+    comm_area_file = config.get_data_path("geoms.comm_areas")
+    out_file = config.get_data_path("geoms.neighborhood_labels")
+    df = ops.neighborhood_labels(in_file,comm_area_file, out_file)
+    return dg_standard_table(df)
+
 @dg_asset(deps=[blocks, comm_areas])
-def map_blocks():
+def block_labels():
     street_block_file = config.get_data_path("geoms.street_blocks")
     comm_area_file = config.get_data_path("geoms.comm_areas")
     out_file = config.get_data_path("geoms.block_labels")
-    df = ops.map_blocks(street_block_file, comm_area_file, out_file)
+    df = ops.block_labels(street_block_file, comm_area_file, out_file)
     return dg_standard_table(df)
 
 @dg_asset(deps=[intersection_points, comm_areas])
-def map_intersections():
+def intersection_labels():
     int_file = config.get_data_path("geoms.street_intersection_points")
     comm_area_file = config.get_data_path("geoms.comm_areas")
     out_file = config.get_data_path("geoms.intersection_labels")
-    df = ops.map_intersections(int_file, comm_area_file, out_file)
+    df = ops.intersection_labels(int_file, comm_area_file, out_file)
     return dg_standard_table(df)
 
 defs = dg.Definitions(assets=[comm_areas,
@@ -95,5 +103,6 @@ defs = dg.Definitions(assets=[comm_areas,
                               hospitals,
                               landmarks,
                               neighborhoods,
-                              map_blocks,
-                              map_intersections])
+                              block_labels,
+                              intersection_labels,
+                              neighborhood_labels])

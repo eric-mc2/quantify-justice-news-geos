@@ -1,5 +1,3 @@
-import pygtrie
-import re
 import geopandas as gpd
 from shapely import from_wkt
 import pandas as pd
@@ -9,6 +7,7 @@ from shapely.geometry import shape
 from scripts.utils.logging import setup_logger
 
 logger = setup_logger(__name__)
+NAD_27_ILLINOIS_EAST = "EPSG:26771"
 
 def clean_comm_areas(in_file, out_file) -> gpd.GeoDataFrame:
     df = pd.read_csv(in_file)
@@ -18,7 +17,7 @@ def clean_comm_areas(in_file, out_file) -> gpd.GeoDataFrame:
     df['id'] = df['AREA_NUMBE']
     df = df.filter(['id','geometry','COMMUNITY'])
     df = df.rename(columns={'COMMUNITY':'community_name'})
-    df = gpd.GeoDataFrame(df, geometry='geometry')
+    df = gpd.GeoDataFrame(df, geometry='geometry', crs="EPSG:4326")
     df.to_parquet(out_file)
     return df
 
@@ -216,17 +215,32 @@ def get_parks(out_file) -> gpd.GeoDataFrame:
     df.to_parquet(out_file)
     return df
 
-def clean_neighborhoods(in_file, out_file) -> pd.Series:
+def clean_neighborhoods(in_file, out_file) -> pd.DataFrame:
     df = pd.read_csv(in_file)
-    names = pd.concat([df['PRI_NEIGH'], df['SEC_NEIGH']])
-    names = names.str.title().drop_duplicates().rename('name')
-    names.to_csv(out_file, index=False)
+    names = df.melt(id_vars='the_geom', value_vars=['PRI_NEIGH','SEC_NEIGH'], value_name='name')
+    names['name'] = names['name'].str.title()
+    names = names.drop_duplicates()
+    names['geometry'] = names['the_geom'].apply(from_wkt)
+    names = gpd.GeoDataFrame(names, geometry='geometry', crs="EPSG:4326")
+    names[['name','geometry']].to_parquet(out_file)
     return names
 
-def map_blocks(street_block_file, comm_area_file, out_file):
+def neighborhood_labels(in_file, comm_area_file, out_file) -> pd.DataFrame:
+    df = gpd.read_parquet(in_file).to_crs(NAD_27_ILLINOIS_EAST)
+    comm_areas = gpd.read_parquet(comm_area_file).to_crs(NAD_27_ILLINOIS_EAST)
+
+    df = df.sjoin(comm_areas[['community_name','geometry']],
+                    how='left', predicate='intersects')
+    
+    df = df[['name','community_name']]
+    df.to_csv(out_file, index=False)
+    return df
+    
+def block_labels(street_block_file, comm_area_file, out_file):
     df = gpd.read_parquet(street_block_file)
     comm_areas = gpd.read_parquet(comm_area_file)
     
+    # TODO: Projected CRS!
     df = df.sjoin(comm_areas[['community_name','geometry']],
                     how='inner',
                     predicate='intersects',
@@ -240,7 +254,8 @@ def map_blocks(street_block_file, comm_area_file, out_file):
                 .drop(columns=['exp'])
                 .drop_duplicates())
     
-    df[['block_name','community_name']].to_parquet(out_file)
+    df = df[['block_name','community_name']]
+    df.to_csv(out_file, index=False)
     return df
 
 def create_intersection_geoms(in_file, out_file):
@@ -281,6 +296,7 @@ def create_intersection_geoms(in_file, out_file):
     
     candidates = pd.concat([candidates_f, candidates_t])    
     candidates = candidates.dropna(subset=['street_nam','geometry_x','geometry_y'])
+    # TODO: projected crs
     candidates = candidates.loc[candidates.geometry_x.intersects(candidates.geometry_y)]
     # Checking intersections is O(n) whereas dupe check is O(nlogn) so filter first.
     candidates = candidates.loc[candidates.index.drop_duplicates()]
@@ -294,22 +310,15 @@ def create_intersection_geoms(in_file, out_file):
     crosses.to_parquet(out_file)
     return crosses
 
-def map_intersections(street_intersection_file, comm_area_file, out_file):
+def intersection_labels(street_intersection_file, comm_area_file, out_file):
     df = gpd.read_parquet(street_intersection_file)
     comm_areas = gpd.read_parquet(comm_area_file)
     
+    # TODO: projected crs!
     df = df.sjoin(comm_areas[['community_name','geometry']],
                     how='inner',
-                    predicate='intersects',
-                    lsuffix='intersection',
-                    rsuffix='comm').drop(columns=['index_comm','geometry'])
+                    predicate='intersects')
     
-    df = (df.melt(id_vars=['community_name'],
-                   value_vars=['block_name1', 'block_name2', 'block_name3', 'block_name4'],
-                   var_name='exp',
-                   value_name='block_name')
-                .drop(columns=['exp'])
-                .drop_duplicates())
-    
-    df[['block_name','community_name']].to_parquet(out_file)
+    df = df[['cross_name','community_name']]
+    df.to_csv(out_file, index=False)
     return df

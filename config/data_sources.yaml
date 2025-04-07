@@ -32,7 +32,7 @@ sent_relevance:
   
 geoms:
   comm_areas: "geoms/comm_areas.parquet"
-  neighborhoods: "geoms/neighborhoods.csv"
+  neighborhoods: "geoms/neighborhoods.parquet"
   street_names: "geoms/street_names.csv"
   street_segs: "geoms/street_segments.parquet"
   street_blocks: "geoms/street_blocks.parquet"
@@ -41,7 +41,9 @@ geoms:
   parks: "geoms/parks.csv"
   landmarks: "geoms/landmarks.parquet"
   hospitals: "geoms/hospitals.parquet"
-  block_labels: "geoms/block_labels.parquet"
+  block_labels: "geoms/block_labels.csv"
+  intersection_labels: "geoms/street_cross_labels.parquet"
+  neighborhood_labels: "geoms/neighborhood_labels.csv"
 
 entity_recognition:
   # Splitting first because only want to look at train data when
