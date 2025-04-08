@@ -41,7 +41,7 @@ geoms:
   parks: "geoms/parks.csv"
   landmarks: "geoms/landmarks.parquet"
   hospitals: "geoms/hospitals.parquet"
-  block_labels: "geoms/block_labels.csv"
+  block_labels: "geoms/block_labels.parquet"
   intersection_labels: "geoms/street_cross_labels.parquet"
   neighborhood_labels: "geoms/neighborhood_labels.csv"
 

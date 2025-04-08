@@ -123,7 +123,7 @@ def create_blocks(streets_in_file, out_file) -> gpd.GeoDataFrame:
                 'block_name3': str(block) + " block of " + str(row.full_name3),
                 'block_name4': str(block) + " block of " + str(row.full_name4),
             })
-    df = gpd.GeoDataFrame(street_blocks, geometry='geometry')
+    df = gpd.GeoDataFrame(street_blocks, geometry='geometry', crs=street_segs.crs)
     df.to_parquet(out_file)
     return df
 
@@ -229,18 +229,19 @@ def neighborhood_labels(in_file, comm_area_file, out_file) -> pd.DataFrame:
     df = gpd.read_parquet(in_file).to_crs(NAD_27_ILLINOIS_EAST)
     comm_areas = gpd.read_parquet(comm_area_file).to_crs(NAD_27_ILLINOIS_EAST)
 
-    df = df.sjoin(comm_areas[['community_name','geometry']],
+    intersection = df.sjoin(comm_areas[['community_name','geometry']],
                     how='left', predicate='intersects')
-    
-    df = df[['name','community_name']]
+    touches = df.sjoin(comm_areas[['community_name','geometry']],
+                    how='left', predicate='touches')
+    df = intersection[['name','community_name']].merge(touches[['name','community_name']], how='left', indicator='_mask')
+    df = df.loc[df['_mask'] == 'left_only'].drop(columns=['_mask'])
     df.to_csv(out_file, index=False)
     return df
     
 def block_labels(street_block_file, comm_area_file, out_file):
-    df = gpd.read_parquet(street_block_file)
-    comm_areas = gpd.read_parquet(comm_area_file)
+    df = gpd.read_parquet(street_block_file).to_crs(NAD_27_ILLINOIS_EAST)
+    comm_areas = gpd.read_parquet(comm_area_file).to_crs(NAD_27_ILLINOIS_EAST)
     
-    # TODO: Projected CRS!
     df = df.sjoin(comm_areas[['community_name','geometry']],
                     how='inner',
                     predicate='intersects',
@@ -255,11 +256,11 @@ def block_labels(street_block_file, comm_area_file, out_file):
                 .drop_duplicates())
     
     df = df[['block_name','community_name']]
-    df.to_csv(out_file, index=False)
+    df.to_parquet(out_file)
     return df
 
 def create_intersection_geoms(in_file, out_file):
-    df = gpd.read_parquet(in_file)
+    df = gpd.read_parquet(in_file).to_crs(NAD_27_ILLINOIS_EAST)
     valid = (df.f_cross.str.count(r'\|') == 4) & (df.t_cross.str.count(r'\|') == 4)
     logger.debug("Dropping %d rows with invalid cross names", sum(~valid))
     
@@ -307,18 +308,18 @@ def create_intersection_geoms(in_file, out_file):
     crosses = cross_left.join(cross_right, how='inner', lsuffix='_x', rsuffix='_y').join(points, how='inner')
     crosses['cross_name'] = crosses['fullname_x'] + " and " + crosses['fullname_y']
     crosses = gpd.GeoDataFrame(crosses[['cross_name','point']], geometry='point', crs=df.crs)
+    crosses = crosses.to_crs("EPSG:4326")
     crosses.to_parquet(out_file)
     return crosses
 
 def intersection_labels(street_intersection_file, comm_area_file, out_file):
-    df = gpd.read_parquet(street_intersection_file)
-    comm_areas = gpd.read_parquet(comm_area_file)
+    df = gpd.read_parquet(street_intersection_file).to_crs(NAD_27_ILLINOIS_EAST)
+    comm_areas = gpd.read_parquet(comm_area_file).to_crs(NAD_27_ILLINOIS_EAST)
     
-    # TODO: projected crs!
     df = df.sjoin(comm_areas[['community_name','geometry']],
                     how='inner',
                     predicate='intersects')
     
     df = df[['cross_name','community_name']]
-    df.to_csv(out_file, index=False)
+    df.to_parquet(out_file)
     return df

@@ -13,7 +13,7 @@ from scripts.utils.logging import setup_logger
 
 logger = setup_logger(__name__)
 
-def pre_inference(in_path, base_model):
+def pre_inference(in_path):
     logger.debug("Concatenating text.")
     article_data = pd.read_parquet(in_path)
     article_data['text'] = article_data['title'] + "\n.\n" + article_data['bodytext']
@@ -23,8 +23,7 @@ def pre_inference(in_path, base_model):
     article_data = pre.normalize(article_data)
 
     logger.debug("Sentencizing text.")
-    nlp = load_spacy(base_model)
-    nlp.disable_pipes()
+    nlp = spacy.blank('en')
     nlp.add_pipe("sentencizer")
     docs = nlp.pipe(article_data['text'], batch_size=64)
 
@@ -37,8 +36,8 @@ def pre_inference(in_path, base_model):
     sentences.columns = ['sentence_idx', 'sentence']
     return pd.concat([article_data.drop(columns=['docs']), sentences], axis=1)
     
-def pre_annotate(in_path, base_model, out_path):
-    article_data = pre_inference(in_path, base_model)
+def pre_annotate(in_path, out_path):
+    article_data = pre_inference(in_path)
     logger.debug("Writing to disk.")
     article_data.to_json(out_path, orient='records', index=False, force_ascii=True)
     return article_data
@@ -91,7 +90,7 @@ def train(base_cfg, full_cfg, train_path, dev_path, out_path, overrides={}):
     return metrics
 
 def inference(in_data_path, model_path, out_data_path):
-    df = pre_inference(in_data_path, model_path)
+    df = pre_inference(in_data_path)
     nlp = spacy.load(model_path)
     docs = list(nlp.pipe(df['sentence']))
     relevant = [any(map(lambda x: x[0] != 'IRRELEVANT' and x[1]>.5, d.cats.items())) for d in docs]

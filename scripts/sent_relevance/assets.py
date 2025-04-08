@@ -17,8 +17,7 @@ art_output_key = dg.AssetDep(dg.AssetKey(['art_relevance','inference']))
 def pre_annotate():
     in_path = config.get_data_path("art_relevance.article_text_filtered")
     out_path = config.get_data_path("sent_relevance.article_text_pre_annotate")
-    model_path = config.get_param("sent_relevance.base_model")
-    df = ops.pre_annotate(in_path, model_path, out_path)
+    df = ops.pre_annotate(in_path, out_path)
     return dg_standard_table(df, meta = {
         "nunique_articles": df['id'].nunique(),
     })
@@ -75,7 +74,6 @@ def train():
 def inference():
     in_data_path = config.get_data_path("art_relevance.article_text_filtered")
     out_data_path = config.get_data_path("sent_relevance.article_text_filtered")
-    model_path = config.get_param("sent_relevance.base_model")
     model_path = config.get_file_path("sent_relevance.trained_model")
     model_path = os.path.join(model_path, "model-best")
     df = ops.inference(in_data_path, model_path, out_data_path)
