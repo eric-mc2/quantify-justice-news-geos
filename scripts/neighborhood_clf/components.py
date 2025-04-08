@@ -9,44 +9,37 @@ from scripts.utils.logging import setup_logger
 
 logger = setup_logger(__name__)
 
-# XXX: TODO: WE DONT NEED THIS TO BE A COMPONENT!
-#           ACTUALLY WE'LL JUST USE AN OTS TEXTCAT
-#           BECAUSE WE WANT THE MODEL TO BE FLEXIBLE
-#           IT WILL ACTUALLY JUST TAKE PLACE ENTITIES, 
-#           NOT WHOLE SENTENCES!
-#           BUT WE WILL JUST USE THE GEOMS TO GENERATE POSITIVE
-#           TRAINING EXAMPLES! THEN THE MODEL WILL BASICALLY
-#           COMPRESS THAT INFORMATION VIA EMBEDDINGS
-#           INTEAD OF MEMORIZING EVERY VARIATION
 @Language.factory("nclf")
 class NeighborhoodClf:
     def __init__(self, nlp, name: str):
-        logger.debug("calling NCLF constructor...")
         self.name = name
         self.vocab = nlp.vocab
-        self.labels = []
+        self.block_labels = None
+        self.neighborhood_labels = None
 
-    def initialize(self, get_examples=None, nlp=None, labels_path:str=None):
-        logger.debug("calling NCLF intialize...")
-        logger.debug("found labels path? {}".format(os.path.exists(labels_path)))
-        df = pd.read_parquet(labels_path, columns=['community_name'])
-        logger.debug("found {} communities".format(len(df)))
-        self.labels = df['community_name'].tolist()
+    def initialize(self, get_examples=None, nlp=None, blocks_path:str=None, neighborhood_path:str=None):
+        self.block_labels = pd.read_parquet(blocks_path).groupby('block_name')['community_name'].agg(list).to_dict()
+        self.neighborhood_labels = pd.read_parquet(neighborhood_path).groupby('name')['community_name'].agg(list).to_dict()
 
     def to_disk(self, path, exclude=tuple()):
         path = ensure_path(path)
         if not path.exists():
             path.mkdir()
-        data_path = path / "labels.json"
-        logger.debug("writing {} communities".format(len(self.labels)))
-        srsly.write_json(data_path, self.labels)
+        self.block_labels.to_json(path / "block_labels.json")
+        self.neighborhood_labels.to_json(path / "neighborhood_labels.json")
 
     def from_disk(self, path, exclude=tuple()):
-        data_path = path / "labels.json"
-        self.labels = srsly.read_json(data_path)
-        logger.debug("loaded {} communities".format(len(self.labels)))
-        logger.debug("loaded {}".format(self.labels))
+        self.block_labels = srsly.read_json(path / "block_labels.json")
+        self.neighborhood_labels = srsly.read_json(path / "neighborhood_labels.json")
         return self
     
     def __call__(self, doc: Doc):
+        for label in self.block_labels.get(doc.text, []):
+            if not hasattr(doc._, 'block_cats') or doc._.block_cats is None:
+                doc._.block_cats = {}
+            doc._.block_cats[label] = 1
+        for label in self.neighborhood_labels.get(doc.text, []):
+            if not hasattr(doc._, 'neighborhood_cats') or doc._.block_cats is None:
+                doc._.block_cats = {}
+            doc._.block_cats[label] = 1
         return doc

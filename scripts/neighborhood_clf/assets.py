@@ -44,6 +44,39 @@ def split():
     yield dg_standard_doc(dev, asset_key=split_dev_key)
     yield dg_standard_doc(test, asset_key=split_test_key)
 
+crosses_train_key = dg.AssetKey([PREFIX, "crosses_train"])
+crosses_dev_key = dg.AssetKey([PREFIX, "crosses_dev"])
+crosses_test_key = dg.AssetKey([PREFIX, "crosses_test"])
+
+@dg.multi_asset(
+    outs= {"crosses_train": dg_asset_out(description="Training data"),
+            "crosses_dev": dg_asset_out(description="Dev data"),
+            "crosses_test": dg_asset_out(description="Eval data")
+    },
+    deps = [dg.AssetKey(["geoms","intersection_labels"])],
+    name = dg.AssetKey([PREFIX, "synthetic_data"]).to_python_identifier()
+)
+def synthetic_data():
+    intersections_path = config.get_data_path("geoms.intersection_labels")
+    train_path = config.get_data_path("neighborhood_clf.crosses_train")
+    dev_path = config.get_data_path("neighborhood_clf.crosses_dev")
+    test_path = config.get_data_path("neighborhood_clf.crosses_test")
+    train, dev, test = ops.synthetic_data(intersections_path, train_path, dev_path, test_path)
+    yield dg_standard_doc(train, asset_key=crosses_train_key)
+    yield dg_standard_doc(dev, asset_key=crosses_dev_key)
+    yield dg_standard_doc(test, asset_key=crosses_test_key)
+
+@dg_asset(deps=[crosses_train_key, crosses_test_key])
+def train_synthetic():
+    train_path = config.get_data_path("neighborhood_clf.crosses_train")
+    dev_path = config.get_data_path("neighborhood_clf.crosses_dev")
+    base_cfg = config.get_file_path("neighborhood_clf.base_cfg")
+    full_cfg = config.get_file_path("neighborhood_clf.full_cfg")
+    out_path = config.get_file_path("neighborhood_clf.trained_model")
+    metrics = ops.train_synthetic(base_cfg, full_cfg, train_path, dev_path, out_path)
+    return dg.MaterializeResult(metadata=metrics)
+
+
 # @dg_asset(deps=[split_train_key], description="Normalize text for labeling")
 # def pre_annotate_train():
 #     in_path = config.get_data_path("neighborhood_clf.train")
@@ -80,7 +113,7 @@ def split():
 
 @dg_asset(deps=[split_train_key, split_dev_key],
           description="Train article relevance classifier")
-def train():
+def init_model():
     train_path = config.get_data_path("neighborhood_clf.train")
     dev_path = config.get_data_path("neighborhood_clf.dev")    
     # train_path = config.get_data_path("neighborhood_clf.labeled_train")
@@ -90,12 +123,12 @@ def train():
     out_path = config.get_file_path("neighborhood_clf.trained_model")
     out_path = os.path.join(out_path, "model-best")
     neighborhood_path = config.get_data_path("geoms.comm_areas")
-    ops.train(base_cfg, full_cfg, train_path, dev_path, out_path, neighborhood_path)
+    ops.init_model(base_cfg, full_cfg, train_path, dev_path, out_path, neighborhood_path)
     # return dg.MaterializeResult(metadata=metrics)
 
-# @dg_asset(deps=[prev, train],
+# @dg_asset(deps=[prev, init_model],
 #           description="Pass original data through ml model")
-@dg_asset(deps=[split_train_key, train],
+@dg_asset(deps=[split_train_key, init_model],
           description="Pass original data through ml model")
 def inference():
     in_data_path = config.get_data_path("entity_recognition.inference")
@@ -111,5 +144,7 @@ defs = dg.Definitions(assets=[join_sentences,
                             #   pre_annotate_train,
                             #   annotate_train,
                             #   annotate_dev,
-                              train,
+                              synthetic_data,
+                              train_synthetic,
+                              init_model,
                               inference])

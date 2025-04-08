@@ -10,9 +10,11 @@ def split_train_dev_test(data: Text,
                          train_path: str = None, 
                          dev_path: str = None, 
                          test_path: str = None,
+                         train_frac = .8,
+                         test_frac = .5,
                          stratify: list[str] = None) -> tuple[Text,Text,Text]:
-    train, dev_test = _split(data, .8, stratify)
-    dev, test = _split(dev_test, .5, stratify)
+    train, dev_test = _split(data, train_frac, stratify)
+    dev, test = _split(dev_test, test_frac, stratify)
     if train_path:
         train.to_parquet(train_path)
     if dev_path:
