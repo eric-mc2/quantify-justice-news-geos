@@ -6,6 +6,7 @@ import spacy
 from spacy.tokens import DocBin, Doc
 from spacy.cli import apply as spacy_infer
 from thinc.api import Config
+import srsly
 
 from scripts.utils import preprocessing as pre
 from scripts.utils.logging import setup_logger
@@ -18,26 +19,42 @@ from scripts.utils.spacy import (load_spacy,
 
 logger = setup_logger(__name__)
 
-def join_sentences(in_path, base_model, out_path):
-    model = spacy.load(base_model)
-    sentences = DocBin().from_disk(in_path).get_docs(model.vocab)
-    sentences = sorted(sentences, key=lambda d: (d.user_data['id'], d.user_data['sentence_idx']))
-    articles = DocBin(store_user_data=True)
-    article = [sentences[0]]
-    for sentence in sentences[1:]:
-        if article[-1].user_data['id'] == sentence.user_data['id']:
-            article.append(sentence)
-        else:
-            articles.add(Doc.from_docs(article))
-            article = [sentence]
-    articles.add(Doc.from_docs(article)) # process last sentence
-    articles.to_disk(out_path)
 
-def split(in_path, base_model, train_path, dev_path, test_path):    
-    model = spacy.load(base_model)
-    docs = list(DocBin().from_disk(in_path).get_docs(model.vocab))
+def _join_docs(docs):
+    cats = {}
+    for d in docs:
+        for c,p in d.cats.items():
+            cats[c] = max(cats.get(c, p), p)
+    doc = Doc.from_docs(docs)#, attrs=['ents'])
+    doc.cats = cats
+    doc.user_data['id'] = docs[-1].user_data['id']
+    return doc
+
+
+# Commented out because other training data is per-span and hard-ish to aggregate to meaningful articles.
+# Whereas the point of aggregating to articles was to do more sophisticated
+# semantic relationship modeling, if needed.
+# def join_sentences(in_path, base_model, out_path):
+#     model = spacy.load(base_model)
+#     sentences = DocBin().from_disk(in_path).get_docs(model.vocab)
+#     sentences = sorted(sentences, key=lambda d: (d.user_data['id'], d.user_data['sentence_idx']))
+#     articles = DocBin(store_user_data=True)
+#     article = [sentences[0]]
+#     for sentence in sentences[1:]:
+#         if article[-1].user_data['id'] == sentence.user_data['id']:
+#             article.append(sentence)
+#         else:
+#             articles.add(_join_docs(article))
+#             article = [sentence]
+#     # process last sentence
+#     articles.add(_join_docs(article))
+#     # output
+#     articles.to_disk(out_path)
+
+def split(in_path, train_path, dev_path, test_path):    
+    docs = pd.read_parquet(in_path)
     train, dev, test = pre.split_train_dev_test(docs)
-    traindb, devdb, testdb = DocBin(), DocBin(), DocBin()
+    traindb, devdb, testdb = DocBin(store_user_data=True), DocBin(store_user_data=True), DocBin(store_user_data=True)
     for d in train:
         traindb.add(d)
     for d in dev:
@@ -49,19 +66,23 @@ def split(in_path, base_model, train_path, dev_path, test_path):
     testdb.to_disk(test_path)
     return train, dev, test
 
-# def pre_annotate(in_path, base_model, out_path):
-#     model = spacy.load(base_model)
-#     docs = list(DocBin().from_disk(in_path).get_docs(model.vocab))
-#     # XXX Drops user info
-#     texts = [{'text': d.text} for d in docs]
-#     texts = pd.DataFrame.from_dict(texts)
-#     texts.to_json(out_path, orient='records', index=False, force_ascii=True)
-#     return texts
+def pre_inference(in_path, base_model) -> list[str]:
+    model = spacy.load(base_model)
+    docs = list(DocBin().from_disk(in_path).get_docs(model.vocab))
+    labels = ['GPE','LOC','FAC']
+    # XXX Drops user info
+    ents = set([e.text for d in docs for e in d.ents if e.label_ in labels])
+    return ents
 
-def synthetic_data(intersections_path, train_path, dev_path, test_path):
+def pre_annotate(in_path, base_model, out_path):
+    ents = pre_inference(in_path, base_model)
+    ents = [{'text': e} for e in ents]
+    srsly.write_json(out_path, ents)
+    return pd.DataFrame.from_records(ents)
+
+def synthetic_data(intersections_path, out_path, k=100000):
     crosses = pd.read_parquet(intersections_path).rename(columns={'cross_name':'name'})
-    crosses = crosses.sample(n=min(10000, len(crosses)))
-    train, dev, test = pre.split_train_dev_test(crosses, train_frac=.6)
+    crosses = crosses.sample(n=min(k, len(crosses)))
     model = spacy.blank("en")
 
     def _to_docs(df):
@@ -83,19 +104,29 @@ def synthetic_data(intersections_path, train_path, dev_path, test_path):
             db.add(doc)
         db.to_disk(path)
 
-    logger.debug("Writing training data ...")
-    train = _to_docs(train)
-    _to_docbin(train, train_path)
-    logger.debug("Writing dev data ...")
-    dev = _to_docs(dev)
-    _to_docbin(dev, dev_path)
-    logger.debug("Writing test data ...")
-    test = _to_docs(test)
-    _to_docbin(test, test_path)
-    return train, dev, test
+    crosses = _to_docs(crosses)
+    _to_docbin(crosses, out_path)
+    return crosses
 
-def train_synthetic(base_cfg, full_cfg, train_path, dev_path, out_path, overrides={}):
-    init_config(base_cfg, full_cfg)
+
+def geocodes(in_path, out_path):
+    labels = (pd.read_parquet(in_path)
+              .filter(['text','neighborhood','confidence'])
+              .rename(columns={'neighborhood':'community_name'})
+              .pipe(pre.normalize)
+              .drop_duplicates(['text','community_name']))
+    nlp = spacy.blank('en')
+    docs = list(nlp.pipe(labels['text'], batch_size=64))
+    db = DocBin()
+    for doc, row in zip(docs, labels.itertuples()):
+        doc.cats[row.community_name] = 1
+        doc.user_data['confidence'] = row.confidence
+        db.add(doc)
+    db.to_disk(out_path)
+    return labels
+
+
+def train(full_cfg, train_path, dev_path, out_path, overrides={}):
     train_spacy(train_path, dev_path, full_cfg, out_path, overrides)
     metrics = load_metrics(out_path)
     return metrics
@@ -110,8 +141,6 @@ def train_synthetic(base_cfg, full_cfg, train_path, dev_path, out_path, override
 
 def init_model(base_cfg, 
           full_cfg, 
-          train_path, 
-          dev_path, 
           out_path, 
           blocks_path,
           neighborhood_path,
@@ -119,10 +148,10 @@ def init_model(base_cfg,
     cfg = Config().from_disk(base_cfg)
     cfg['initialize']['components']['nclf']['neighborhood_path'] = neighborhood_path
     cfg['initialize']['components']['nclf']['blocks_path'] = blocks_path
-    cfg['paths']['train'] = train_path
-    cfg['paths']['dev'] = dev_path
-    cfg['corpora']['train']['path'] = train_path
-    cfg['corpora']['dev']['path'] = dev_path
+    # cfg['paths']['train'] = train_path
+    # cfg['paths']['dev'] = dev_path
+    # cfg['corpora']['train']['path'] = train_path
+    # cfg['corpora']['dev']['path'] = dev_path
     cfg.to_disk(base_cfg)
 
     code_path = os.path.join(os.path.dirname(__file__), "components.py")

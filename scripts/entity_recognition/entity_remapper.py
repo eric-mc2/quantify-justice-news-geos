@@ -6,7 +6,7 @@ def entity_remapper(doc: Doc):
     # Create mapping from original to new entity types
     loc_labels = [
         'FAC', # Buildings, airports, highways, bridges, etc.
-        # 'ORG', # Companies, agencies, institutions, etc.
+        'ORG', # Companies, agencies, institutions, etc.
         'GPE', # Countries, cities, states
         'LOC', # Non-GPE locations, mountain ranges, bodies of water
         'EVENT' # Named events (e.g., "World Cup")

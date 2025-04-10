@@ -33,3 +33,5 @@ neighborhood_clf:
   base_cfg: "scripts/neighborhood_clf/spacy_base_config.cfg"
   full_cfg: "scripts/neighborhood_clf/spacy_config.cfg"
   trained_model: "models/neighborhood_clf/"
+  proto_seed: 40925
+  k: 600
