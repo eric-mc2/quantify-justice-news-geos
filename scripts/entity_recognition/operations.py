@@ -114,9 +114,9 @@ def train(base_cfg,
           street_path, 
           overrides = {}):
     cfg = Config().from_disk(base_cfg)
-    cfg['initialize']['components']['gpe_matcher']['comm_area_path'] = comm_area_path
-    cfg['initialize']['components']['gpe_matcher']['neighborhood_path'] = neighborhood_path
-    cfg['initialize']['components']['street_matcher']['street_name_path'] = street_path
+    # cfg['initialize']['components']['community_matcher']['comm_area_path'] = comm_area_path
+    # cfg['initialize']['components']['neighborhood_matcher']['neighborhood_path'] = neighborhood_path
+    # cfg['initialize']['components']['street_matcher']['street_name_path'] = street_path
     cfg['paths']['train'] = train_path
     cfg['paths']['dev'] = dev_path
     cfg['corpora']['train']['path'] = train_path
@@ -124,24 +124,28 @@ def train(base_cfg,
     cfg.to_disk(base_cfg)
 
     code_path = os.path.join(os.path.dirname(__file__), "components.py")
-    # label_path = cfg['initialize']['components']['ner']['labels']['path']
-    # os.makedirs(label_path, exist_ok=True)
+    more_overrides = {"code": code_path,
+                      "initialize.components.community_matcher.comm_area_path": comm_area_path,
+                      "initialize.components.neighborhood_matcher.neighborhood_path": neighborhood_path,
+                      "initialize.components.street_matcher.street_name_path": street_path,
+    }
 
     init_config(base_cfg, full_cfg, code_path)
-    # init_labels(full_cfg, label_path, code_path)
-    train_spacy(train_path, dev_path, full_cfg, out_path, overrides | {"code": code_path})
+    train_spacy(train_path, dev_path, full_cfg, out_path, overrides | more_overrides)
     # metrics = load_metrics(out_path)
     # return metrics
 
-def inference(in_path, model_path, out_path):
+def inference(in_path, model_path, out_path, filter_=True):
     Language.component('block_matcher', func=block_matcher)
     Language.component('intersection_matcher', func=intersection_matcher)
     Language.component('street_vs_neighborhood', func=street_vs_neighborhood)
     spacy_infer(Path(in_path), Path(out_path), model_path, None, 1, 1)
     docs = list(DocBin().from_disk(out_path).get_docs(spacy.load(model_path).vocab))
-    crime_ents = ["FAC","GPE","LOC","PERSON"]
-    docs = [d for d in docs if any([e.label_ in crime_ents for e in d.ents])]
+    if filter_:
+        crime_ents = ["FAC","GPE","LOC","PERSON"]
+        docs = [d for d in docs if any([e.label_ in crime_ents for e in d.ents])]
     db = DocBin(store_user_data=True)
     for doc in docs:
         db.add(doc)
     db.to_disk(out_path)
+    return docs

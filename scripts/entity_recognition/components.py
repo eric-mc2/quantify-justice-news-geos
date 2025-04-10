@@ -8,14 +8,20 @@ from spacy.matcher.phrasematcher import PhraseMatcher
 from spacy.matcher.matcher import Matcher
 
 from scripts.geoms.operations import sides
+from scripts.utils.logging import setup_logger
+
+logger = setup_logger(__name__)
 
 class MatcherBase:
+    Span.set_extension("gpe_shape", default="", force=True)
+
     def __init__(self, nlp, name: str, overwrite: bool=False):
         self.name = name
         self.matcher = None
         self.patterns = None
         self.vocab = nlp.vocab
         self.overwrite = overwrite
+        self.gpe_shape = None
 
     def to_disk(self, path, exclude=tuple()):
         # This will receive the directory path + /my_component
@@ -41,10 +47,12 @@ class MatcherBase:
         matches = self.matcher(doc, as_spans=True)
         matches = [m for m in matches if not self._skip(doc, m)]
         doc.ents = filter_spans(list(doc.ents) + matches)
+        gpe_match = [m for m in matches if m in doc.ents]
+        for ent in gpe_match:
+            ent._.gpe_shape = self.gpe_shape
         return doc
     
 
-@Language.factory("gpe_matcher")
 class GPEMatcher(MatcherBase):
     def from_disk(self, path, exclude=tuple()):
         super().from_disk(path, exclude)
@@ -52,17 +60,39 @@ class GPEMatcher(MatcherBase):
         self.matcher.add("GPE", self.patterns)
         return self
 
-    def initialize(self, get_examples=None, nlp=None, comm_area_path: str=None, neighborhood_path: str=None):
-        gpes = pd.concat([gpd.read_parquet(comm_area_path)['community_name'].rename('name'),
-                            pd.read_csv(neighborhood_path)['name'],
-                            pd.Series(sides)], ignore_index=True)
+    def initialize(self, get_examples=None, nlp=None, gpes:pd.Series=None):
         gpes = gpes.str.split(",", expand=False).explode()
         gpes = gpes.str.title().drop_duplicates().sort_values()
         
         self.matcher = PhraseMatcher(self.vocab)
         self.patterns = list(nlp.tokenizer.pipe(gpes))
         self.matcher.add("GPE", self.patterns)    
+
+
+@Language.factory("community_matcher")
+class CommMatcher(GPEMatcher):
+    def initialize(self, get_examples=None, nlp=None, comm_area_path: str=None):
+        gpes = gpd.read_parquet(comm_area_path)['community_name'].rename('name')
+        super().initialize(get_examples, nlp, gpes)        
+        self.gpe_shape = "community"
+
+@Language.factory("neighborhood_matcher")
+class HoodMatcher(GPEMatcher):
+    def initialize(self, get_examples=None, nlp=None, neighborhood_path: str=None):
+        logger.warning("Opening neighborhoods file: %s", neighborhood_path)
+        gpes = pd.read_parquet(neighborhood_path)['name']
+        super().initialize(get_examples, nlp, gpes)
+        self.gpe_shape = "neighborhood"
+
+
+@Language.factory("side_matcher")
+class SideMatcher(GPEMatcher):
+    def initialize(self, get_examples=None, nlp=None):
+        gpes = pd.Series(sides)
+        super().initialize(get_examples, nlp, gpes)
+        self.gpe_shape = "side"
     
+
 @Language.factory("street_matcher")
 class StreetMatcher(MatcherBase):
     def from_disk(self, path, exclude=tuple()):
@@ -79,6 +109,7 @@ class StreetMatcher(MatcherBase):
         self.matcher = PhraseMatcher(self.vocab)
         self.patterns = list(nlp.tokenizer.pipe(street_names))
         self.matcher.add("FAC", self.patterns)
+        self.gpe_shape = "street"
 
 @Language.component("street_vs_neighborhood")
 def street_vs_neighborhood(doc: Doc):
@@ -90,6 +121,7 @@ def street_vs_neighborhood(doc: Doc):
             # Must match [FAC] neighborhood
             if next_token.text == "neighborhood":
                 new_ent = Span(doc, ent.start, ent.end, label="GPE")
+                new_ent._.gpe_shape = "neighborhood"
                 new_ents.append(new_ent)
             else:
                 new_ents.append(ent)
@@ -130,6 +162,9 @@ def block_matcher(doc: Doc):
                 new_ent = Span(doc, ent.start - 3, ent.end, label=ent.label)
                 new_ents.append(new_ent)
     doc.ents = filter_spans(list(doc.ents) + new_ents)
+    gpe_match = [m for m in new_ents if m in doc.ents]
+    for ent in gpe_match:
+        ent._.gpe_shape = "block"
     return doc
 
 @Language.component("intersection_matcher")
@@ -146,4 +181,7 @@ def intersection_matcher(doc: Doc):
                 new_ent = Span(doc, ent.start - 2, ent.end, label=ent.label)
                 new_ents.append(new_ent)
     doc.ents = filter_spans(list(doc.ents) + new_ents)
+    gpe_match = [m for m in new_ents if m in doc.ents]
+    for ent in gpe_match:
+        ent._.gpe_shape = "cross"
     return doc

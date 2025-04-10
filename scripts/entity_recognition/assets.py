@@ -4,7 +4,7 @@ import dagster as dg
 
 from scripts.utils.config import Config
 from scripts.entity_recognition import operations as ops
-from scripts.utils.dagster import dg_standard_table
+from scripts.utils.dagster import dg_standard_table, dg_standard_doc
 
 config = Config()
 PREFIX = "entity_recognition"
@@ -107,7 +107,8 @@ def inference():
     out_path = config.get_data_path("entity_recognition.inference")
     model_path = config.get_file_path("entity_recognition.trained_model")
     model_path = os.path.join(model_path, "model-best")
-    ops.inference(in_path, model_path, out_path)
+    docs = ops.inference(in_path, model_path, out_path, filter_=True)
+    return dg_standard_doc(docs)
 
 
 # NOTE: A good way to make this half-idempotent is to have a "sink" version
