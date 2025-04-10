@@ -4,7 +4,7 @@ import os
 from functools import partial
 
 from scripts.utils.config import Config
-from scripts.pre_model import assets as pre_ops
+from scripts.prior_model import assets as pre_ops
 from scripts.art_relevance import operations as ops
 from scripts.utils.dagster import dg_standard_table
 
@@ -15,7 +15,7 @@ dg_asset_out = partial(dg.AssetOut, key_prefix=[PREFIX], group_name=PREFIX)
 
 @dg_asset(deps=[pre_ops.pre_relevant], description="Normalize text for labeling")
 def pre_annotate():
-    in_path = config.get_data_path("pre_relevance.article_text_filtered")
+    in_path = config.get_data_path("prior_model.article_text_filtered")
     out_path = config.get_data_path("art_relevance.article_text_pre_annotate")
     k = config.get_param("art_relevance.k")
     seed = config.get_param("art_relevance.proto_seed")
@@ -70,13 +70,13 @@ def train():
 @dg_asset(deps=[pre_ops.pre_relevant, train], 
           description="Pass original data through ml model")
 def inference():
-    in_data_path = config.get_data_path("pre_relevance.article_text_filtered")
+    in_data_path = config.get_data_path("prior_model.article_text_filtered")
     out_data_path = config.get_data_path("art_relevance.article_text_filtered")
     model_path = config.get_file_path("art_relevance.trained_model")
     seed = config.get_param("entity_recognition.proto_seed")
     k = config.get_param("entity_recognition.k")
     best_model_path = os.path.join(model_path, "model-best")
-    df = ops.inference(best_model_path, in_data_path, out_data_path, k, seed)
+    df = ops.inference(best_model_path, in_data_path, out_data_path, k, seed, filter_=True)
     return dg_standard_table(df)
 
 defs = dg.Definitions(assets=[pre_annotate,

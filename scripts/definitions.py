@@ -1,5 +1,5 @@
 from dagster import Definitions
-from scripts.pre_model import assets as pre_assets
+from scripts.prior_model import assets as pre_assets
 from scripts.art_relevance import assets as art_assets
 from scripts.sent_relevance import assets as sent_assets
 from scripts.geoms import assets as geom_assets

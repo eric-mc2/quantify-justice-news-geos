@@ -68,14 +68,15 @@ def train(base_cfg, full_cfg, train_path, dev_path, out_path, overrides={}):
     metrics = load_metrics(out_path)
     return metrics
 
-def inference(model_path, in_data_path, out_data_path, k, seed):
+def inference(model_path, in_data_path, out_data_path, k, seed, filter_=True):
     df = prototype_sample(in_data_path, k, seed)
     df = pre_inference(in_path=None, in_df=df, mode="inference")
     
     nlp = spacy.load(model_path)
-    labels = [doc.cats['CRIME'] > doc.cats['IRRELEVANT']
-                for doc in nlp.pipe(df['title'])]
-    relevant = pd.Series(labels, df.index)
-    result = df[relevant]
-    result.to_parquet(out_data_path)
-    return result
+    labels = [doc.cats for doc in nlp.pipe(df['title'])]
+    labels = pd.Series(labels, df.index).apply(pd.Series)
+    df = df.join(labels)
+    if filter_:
+        df = df[df['CRIME'] > df['IRRELEVANT']]
+    df.to_parquet(out_data_path)
+    return df

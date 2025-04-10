@@ -14,27 +14,33 @@ from scripts.utils.logging import setup_logger
 logger = setup_logger(__name__)
 
 def pre_inference(in_path):
-    logger.debug("Concatenating text.")
+    logger.info("Concatenating text.")
     article_data = pd.read_parquet(in_path)
     article_data['text'] = article_data['title'] + "\n.\n" + article_data['bodytext']
     article_data = article_data.drop(columns=['title','bodytext'])
+    logger.debug("article data has %d rows, %d unique ids, %d unique text",
+                 len(article_data), article_data.id.nunique(), article_data.text.nunique())
     
-    logger.debug("Normalizing text.")
+    logger.info("Normalizing text.")
     article_data = pre.normalize(article_data)
+    logger.debug("article data has %d rows, %d unique ids, %d unique text",
+                 len(article_data), article_data.id.nunique(), article_data.text.nunique())
 
-    logger.debug("Sentencizing text.")
+    logger.info("Sentencizing text.")
     nlp = spacy.blank('en')
     nlp.add_pipe("sentencizer")
-    docs = nlp.pipe(article_data['text'], batch_size=64)
+    # Note: Make this a list now to immediately invoke pipe
+    docs = list(nlp.pipe(article_data['text'], batch_size=64))
+    logger.debug("Sentencized %d docs", len(docs))
 
-    logger.debug("Re-data-framing.")
-    article_data['docs'] = [[(i, s.text) for i,s in enumerate(d.sents)] for d in docs]
-    article_data = (article_data
-                .drop(columns=['text'])
-                .explode('docs'))
-    sentences = article_data['docs'].apply(pd.Series)
-    sentences.columns = ['sentence_idx', 'sentence']
-    return pd.concat([article_data.drop(columns=['docs']), sentences], axis=1)
+    logger.info("Re-data-framing.")
+    sentences = [[{'sentence_idx': i, 'sentence': s.text} for i,s in enumerate(d.sents)] for d in docs]
+    sentences = pd.Series(sentences, article_data.index).explode().apply(pd.Series)
+    logger.debug("Sentencized into %d sentences", len(sentences))
+    sentence_data = article_data.drop(columns=['text']).join(sentences).reset_index(drop=True)
+    logger.debug("Pre-inference data has %d rows, %d ids, max %d sentences",
+                 len(sentence_data), sentence_data.id.nunique(), sentence_data.sentence_idx.max())
+    return sentence_data
     
 def pre_annotate(in_path, out_path):
     article_data = pre_inference(in_path)
@@ -89,13 +95,21 @@ def train(base_cfg, full_cfg, train_path, dev_path, out_path, overrides={}):
     metrics = load_metrics(out_path)
     return metrics
 
-def inference(in_data_path, model_path, out_data_path):
+def inference(in_data_path, model_path, out_data_path, filter_=True):
     df = pre_inference(in_data_path)
     nlp = spacy.load(model_path)
-    docs = list(nlp.pipe(df['sentence']))
-    relevant = [any(map(lambda x: x[0] != 'IRRELEVANT' and x[1]>.5, d.cats.items())) for d in docs]
-    relevant = pd.Series(relevant, index=df.index)
+    docs = list(nlp.pipe(df['sentence'], batch_size=64))
+    logger.debug("Predicted on %d docs", len(docs))
     cats = pd.Series([d.cats for d in docs], index=df.index).apply(pd.Series)
-    result = pd.concat([df[relevant], cats[relevant]], axis=1)
-    _to_docbin(result, list(cats.columns), out_data_path, mode='inference')
-    return result
+    logger.debug("Predicted %d cats", len(cats))
+    df = df.join(cats, lsuffix="_article", rsuffix="_sentence")
+    logger.debug("Joined data has %d rows", len(df))
+    relevant = (cats.drop(columns=['IRRELEVANT']) > .5).any(axis=1)
+    logger.info("Pct relevant %.2f", relevant.mean())
+    if filter_:
+        df = df[relevant]
+        docs = [d for d,r in zip(docs, relevant) if r]
+    names = list(cats.columns) + ['CRIME','IRRELEVANT_sentence','IRRELEVANT_article']
+    names = df.columns.intersection(names)
+    _to_docbin(df, names, out_data_path, mode='inference')
+    return df

@@ -76,7 +76,7 @@ def inference():
     out_data_path = config.get_data_path("sent_relevance.article_text_filtered")
     model_path = config.get_file_path("sent_relevance.trained_model")
     model_path = os.path.join(model_path, "model-best")
-    df = ops.inference(in_data_path, model_path, out_data_path)
+    df = ops.inference(in_data_path, model_path, out_data_path, filter_=True)
     return dg_standard_table(df)
 
 defs = dg.Definitions(assets=[pre_annotate,

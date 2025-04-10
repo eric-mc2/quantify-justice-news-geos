@@ -233,8 +233,9 @@ def neighborhood_labels(in_file, comm_area_file, out_file) -> pd.DataFrame:
                     how='left', predicate='intersects')
     touches = df.sjoin(comm_areas[['community_name','geometry']],
                     how='left', predicate='touches')
-    df = intersection[['name','community_name']].merge(touches[['name','community_name']], how='left', indicator='_mask')
-    df = df.loc[df['_mask'] == 'left_only'].drop(columns=['_mask'])
+    df = intersection.merge(touches, on=['name','community_name'], how='left', indicator='_mask')
+    df = df.loc[df['_mask'] == 'left_only']
+    df = df.filter(['name','community_name'])
     df.to_csv(out_file, index=False)
     return df
     
@@ -297,7 +298,6 @@ def create_intersection_geoms(in_file, out_file):
     
     candidates = pd.concat([candidates_f, candidates_t])    
     candidates = candidates.dropna(subset=['street_nam','geometry_x','geometry_y'])
-    # TODO: projected crs
     candidates = candidates.loc[candidates.geometry_x.intersects(candidates.geometry_y)]
     # Checking intersections is O(n) whereas dupe check is O(nlogn) so filter first.
     candidates = candidates.loc[candidates.index.drop_duplicates()]

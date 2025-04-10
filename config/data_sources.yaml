@@ -7,8 +7,10 @@ raw:
   street_names: "raw/StreetNames_2025.csv"
   street_segs: "raw/StreetSegments_2025.geojson"
 
-pre_relevance:
+prior_model:
   article_text_filtered: "pre_relevance/articles.parquet"
+  geocodes: "prior_model/geocodes.parquet"
+  user_coding: "prior_model/user_coding.parquet"
 
 art_relevance:
   # This is JSON because Label-Studio doesn't accept jsonl!
