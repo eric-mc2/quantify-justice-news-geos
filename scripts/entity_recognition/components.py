@@ -1,6 +1,7 @@
 import pandas as pd
 import geopandas as gpd
 from enum import Flag, auto
+import re
 
 import spacy
 from spacy.tokens import Doc, Span, DocBin
@@ -43,13 +44,11 @@ class MatcherBase:
         for d in self.patterns:
             db.add(d)
         db.to_disk(data_path)
-        srsly.write_json(path / "config.json", {"gpe_shape": self.gpe_shape})
 
     def from_disk(self, path, exclude=tuple()):
         # This will receive the directory path + /my_component
         data_path = path / "patterns.spacy"
         self.patterns = list(DocBin().from_disk(data_path).get_docs(self.vocab))
-        self.gpe_shape = srsly.read_json(path / "config.json")['gpe_shape']
         return self
     
     def _skip(self, match: Span):
@@ -80,14 +79,21 @@ class GPEMatcher(MatcherBase):
 
 @Language.factory("neighborhood_matcher")
 class HoodMatcher(GPEMatcher):
+    def __init__(self, nlp, name: str, overwrite: bool=False):
+        super().__init__(nlp, name, overwrite)
+        self.gpe_shape = "neighborhood"
+
     def initialize(self, get_examples=None, nlp=None, neighborhood_path: str=None):
         gpes = pd.read_parquet(neighborhood_path)['name'] + " neighborhood"
         super().initialize(get_examples, nlp, gpes)
-        self.gpe_shape = "neighborhood"
 
 
 @Language.factory("street_matcher")
 class StreetMatcher(MatcherBase):
+    def __init__(self, nlp, name: str, overwrite: bool=False):
+        super().__init__(nlp, name, overwrite)
+        self.gpe_shape = "street"
+    
     def from_disk(self, path, exclude=tuple()):
         super().from_disk(path, exclude)
         self.matcher = PhraseMatcher(self.vocab)
@@ -102,31 +108,39 @@ class StreetMatcher(MatcherBase):
         self.matcher = PhraseMatcher(self.vocab)
         self.patterns = list(nlp.tokenizer.pipe(street_names))
         self.matcher.add("FAC", self.patterns)
-        self.gpe_shape = "street"
 
 
 @Language.factory("community_matcher")
 class CommMatcher(GPEMatcher):
+    def __init__(self, nlp, name: str, overwrite: bool=False):
+        super().__init__(nlp, name, overwrite)
+        self.gpe_shape = "community"
+
     def initialize(self, get_examples=None, nlp=None, comm_area_path: str=None):
         gpes = gpd.read_parquet(comm_area_path)['community_name']
         super().initialize(get_examples, nlp, gpes)        
-        self.gpe_shape = "community"
 
 
 @Language.factory("neighborhood_name_matcher")
 class HoodNameMatcher(GPEMatcher):
+    def __init__(self, nlp, name: str, overwrite: bool=False):
+        super().__init__(nlp, name, overwrite)
+        self.gpe_shape = "neighborhood"
+
     def initialize(self, get_examples=None, nlp=None, neighborhood_path: str=None):
         gpes = pd.read_parquet(neighborhood_path)['name']
         super().initialize(get_examples, nlp, gpes)
-        self.gpe_shape = "neighborhood"
 
 
 @Language.factory("side_matcher")
 class SideMatcher(GPEMatcher):
+    def __init__(self, nlp, name: str, overwrite: bool=False):
+        super().__init__(nlp, name, overwrite)
+        self.gpe_shape = "side"
+
     def initialize(self, get_examples=None, nlp=None):
         gpes = pd.Series(sides)
         super().initialize(get_examples, nlp, gpes)
-        self.gpe_shape = "side"
     
 
 @Language.component("street_vs_neighborhood")
@@ -224,7 +238,7 @@ def ent_merger(doc: Doc) -> Doc:
     while i < len(A) and j < len(B):
         a = A[i]
         b = B[j]
-        if compare(a, b) == Comparison.LT:
+        if compare(a, b) in [Comparison.LT, Comparison.CONTAINS]:
             merged.append(a)
             i += 1
         elif compare(a, b) == Comparison.GT:
@@ -232,8 +246,9 @@ def ent_merger(doc: Doc) -> Doc:
             j += 1
         else:
             if compare(a, b) != Comparison.EQ:
-                logger.warning("Replacing %s [%s] with %s [%s,%s]",
-                           a.text, a.label_, b.text, b.label_, b._.gpe_shape)
+                logger.warning("Replacing %s (%s) [%d,%d) with %s (%s,%s) [%d,%d]",
+                           a.text, a.label_, a.start, a.end,
+                           b.text, b.label_, b._.gpe_shape, b.start, b.end)
             merged.append(b)
             i += 1  # Skip this item from A
             j += 1
@@ -248,7 +263,7 @@ def ent_merger(doc: Doc) -> Doc:
         merged.append(B[j])
         j += 1
 
-    doc.ents = sorted(merged, key=lambda x: x.start)
+    doc.ents = filter_spans(sorted(merged, key=lambda x: x.start))
     doc._.ents = None
     return doc
 
@@ -270,13 +285,21 @@ def apply_ents(doc: Doc, new_ents: list[Span], component_name: str, gpe_shape: s
 def block_matcher(doc: Doc):
     # TODO: This sees to not be working. Though NER seems to be making block matches so i'm confused.
     new_ents = []
-    for idx, ent in enumerate(doc.ents):
-        if ent.label_ == "FAC" and ent.start >= 3 and idx >= 1:
-            prev_ent = list(doc.ents)[idx-1]
+    # for idx, ent in enumerate(doc.ents):
+    #     if ent.label_ == "FAC" and ent.start >= 3 and idx >= 1:
+    #         prev_ent = list(doc.ents)[idx-1]
+    #         prev_tokens = doc[ent.start - 3: ent.start]
+    #         # Must match [CARDINAL] block of [FAC]
+    #         if (prev_tokens[2].text == "of" and prev_tokens[1].text == "block"
+    #             and prev_ent.label_ == "CARDINAL" and prev_tokens[0].text == prev_ent.text):
+    #             new_ent = Span(doc, ent.start - 3, ent.end, label=ent.label)
+    #             new_ents.append(new_ent)
+    for idx, ent in enumerate(doc._.ents):
+        if ent.label_ == "FAC" and ent.start >= 3:
             prev_tokens = doc[ent.start - 3: ent.start]
             # Must match [CARDINAL] block of [FAC]
             if (prev_tokens[2].text == "of" and prev_tokens[1].text == "block"
-                and prev_ent.label_ == "CARDINAL" and prev_tokens[0].text == prev_ent.text):
+                and re.match(r"\d+00", prev_tokens[0].text)):
                 new_ent = Span(doc, ent.start - 3, ent.end, label=ent.label)
                 new_ents.append(new_ent)
     return apply_ents(doc, new_ents, "block_matcher", "block")
