@@ -66,17 +66,20 @@ def split(in_path, train_path, dev_path, test_path):
     testdb.to_disk(test_path)
     return train, dev, test
 
-def pre_inference(in_path, base_model) -> list[str]:
+def pre_inference(in_path, base_model) -> list[Doc]:
     model = spacy.load(base_model)
     docs = list(DocBin().from_disk(in_path).get_docs(model.vocab))
     labels = ['GPE','LOC','FAC']
-    # XXX Drops user info
-    ents = set([e.text for d in docs for e in d.ents if e.label_ in labels])
+    shapes = ['community', 'block']
+    ents = set([e for d in docs 
+                for e in d.ents 
+                if e.label_ in labels
+                and e._.gpe_shape not in shapes])
     return ents
 
 def pre_annotate(in_path, base_model, out_path):
     ents = pre_inference(in_path, base_model)
-    ents = [{'text': e} for e in ents]
+    ents = [{'text': e.text, "gpe_shape": e._.gpe_shape} for e in ents]
     srsly.write_json(out_path, ents)
     return pd.DataFrame.from_records(ents)
 

@@ -114,9 +114,6 @@ def train(base_cfg,
           street_path, 
           overrides = {}):
     cfg = Config().from_disk(base_cfg)
-    # cfg['initialize']['components']['community_matcher']['comm_area_path'] = comm_area_path
-    # cfg['initialize']['components']['neighborhood_matcher']['neighborhood_path'] = neighborhood_path
-    # cfg['initialize']['components']['street_matcher']['street_name_path'] = street_path
     cfg['paths']['train'] = train_path
     cfg['paths']['dev'] = dev_path
     cfg['corpora']['train']['path'] = train_path
@@ -126,6 +123,7 @@ def train(base_cfg,
     code_path = os.path.join(os.path.dirname(__file__), "components.py")
     more_overrides = {"code": code_path,
                       "initialize.components.community_matcher.comm_area_path": comm_area_path,
+                      "initialize.components.neighborhood_name_matcher.neighborhood_path": neighborhood_path,
                       "initialize.components.neighborhood_matcher.neighborhood_path": neighborhood_path,
                       "initialize.components.street_matcher.street_name_path": street_path,
     }
