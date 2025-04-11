@@ -62,8 +62,10 @@ entity_recognition:
   inference: "entity_recognition/predictions.spacy"
 
 neighborhood_clf:
-  geocodes: "neighborhood_clf/geocodes.spacy"
+  geocodes: "neighborhood_clf/geocodes.parquet"
   crosses: "neighborhood_clf/crosses.spacy"
+  ner_labels: "neighborhood_clf/ner_labels.parquet"
+  synth_data: "neighborhood_clf/synthetic_data.spacy"
   pre_annotate: "neighborhood_clf/pre_annotate.json"
   train: "neighborhood_clf/articles_train.spacy"
   dev: "neighborhood_clf/articles_dev.spacy"

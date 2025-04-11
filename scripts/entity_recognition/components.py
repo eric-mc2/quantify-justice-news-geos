@@ -302,7 +302,7 @@ def block_matcher(doc: Doc):
                 and re.match(r"\d+00", prev_tokens[0].text)):
                 new_ent = Span(doc, ent.start - 3, ent.end, label=ent.label)
                 new_ents.append(new_ent)
-    return apply_ents(doc, new_ents, "block_matcher", "block")
+    return apply_ents(doc, new_ents, "block_matcher", gpe_shape="block")
 
 
 @Language.component("intersection_matcher")
@@ -317,7 +317,7 @@ def intersection_matcher(doc: Doc):
                 and prev_ent.label_ == "FAC" and prev_tokens[0].text == prev_ent.text):
                 new_ent = Span(doc, ent.start - 2, ent.end, label=ent.label)
                 new_ents.append(new_ent)
-    return apply_ents(doc, new_ents, "intersection_matcher", "cross")
+    return apply_ents(doc, new_ents, "intersection_matcher", gpe_shape="cross")
 
 
 if __name__ == "__main__":

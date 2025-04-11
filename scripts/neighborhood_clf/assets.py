@@ -37,24 +37,49 @@ def geocodes():
     return dg_standard_table(df)
 
 
-@dg_asset(deps=[dg.AssetKey(["entity_recognition", "inference"])], 
-          description="Normalize text for labeling")
-def pre_annotate():
+@dg_asset(deps=[dg.AssetKey(["entity_recognition", "inference"]),
+                dg.AssetKey(["geoms", "block_labels"]),
+                dg.AssetKey(["geoms", "intersection_labels"])])
+def ner_labels():
     in_path = config.get_data_path("entity_recognition.inference")
+    block_labels = config.get_data_path("geoms.block_labels")
+    cross_labels = config.get_data_path("geoms.intersection_labels")
     model = config.get_param("neighborhood_clf.base_model")
-    out_path = config.get_data_path("neighborhood_clf.pre_annotate")
-    df = ops.pre_annotate(in_path, model, out_path)
+    out_path = config.get_data_path("neighborhood_clf.ner_labels")
+    df = ops.ner_labels(in_path, model, block_labels, cross_labels, out_path)
     return dg_standard_table(df)
 
-
-@dg_asset(deps=[pre_annotate], description="Manually label in Label Studio")
-def annotate():
-    # Creating the verbose labels is a manual process! 
-    # Used Label Studio on preprocessed outs.
-    in_path = config.get_data_path("neighborhood_clf.labeled_verbose_train")
-    out_path = config.get_data_path("neighborhood_clf.labeled_train")
-    df = ops.annotate(in_path, out_path)
+@dg_asset(deps = [dg.AssetKey(["geoms","intersection_labels"]), 
+                  geocodes, 
+                  ner_labels],
+          description="Combine data for training")
+def merge_synth_data():
+    cross_path = config.get_data_path("geoms.intersection_labels")
+    geo_path = config.get_data_path("neighborhood_clf.geocodes")
+    ner_path = config.get_data_path("neighborhood_clf.ner_labels")
+    model = config.get_param("neighborhood_clf.base_model")
+    out_path = config.get_data_path("neighborhood_clf.synth_data")
+    df = ops.merge_synth_data(cross_path, geo_path, ner_path, model, out_path)
     return dg_standard_table(df)
+
+# @dg_asset(deps=[dg.AssetKey(["entity_recognition", "inference"])], 
+#           description="Normalize text for labeling")
+# def pre_annotate():
+#     in_path = config.get_data_path("entity_recognition.inference")
+#     model = config.get_param("neighborhood_clf.base_model")
+#     out_path = config.get_data_path("neighborhood_clf.pre_annotate")
+#     df = ops.pre_annotate(in_path, model, out_path)
+#     return dg_standard_table(df)
+
+
+# @dg_asset(deps=[pre_annotate], description="Manually label in Label Studio")
+# def annotate():
+#     # Creating the verbose labels is a manual process! 
+#     # Used Label Studio on preprocessed outs.
+#     in_path = config.get_data_path("neighborhood_clf.labeled_verbose_train")
+#     out_path = config.get_data_path("neighborhood_clf.labeled_train")
+#     df = ops.annotate(in_path, out_path)
+#     return dg_standard_table(df)
 
 split_train_key = dg.AssetKey([PREFIX, "split_train"])
 split_dev_key = dg.AssetKey([PREFIX, "split_dev"])
@@ -65,28 +90,20 @@ split_test_key = dg.AssetKey([PREFIX, "split_test"])
             "split_dev": dg_asset_out(description="Dev data"),
             "split_test": dg_asset_out(description="Eval data")
     },
-    deps = [dg.AssetKey(["prior_model","user_coding"])],
+    deps = [merge_synth_data],
     name = dg.AssetKey([PREFIX, "split"]).to_python_identifier()
 )
 def split():
-    # TODO: I'm actually Noooooot sure what to do here...
-    # definitely need to combine all 3 data sources?
-    # so split and then annotate the pipeline data
-    # then add the geocoded stuff and the synthetic stuff in some proportion.
-    # but maybe need to add geo locations to the user codes first.
-    # can use them for ER as-is
-    in_path = config.get_data_path("neighborhood_clf.articles")
+    in_path = config.get_data_path("neighborhood_clf.synth_data")
+    model = config.get_param("neighborhood_clf.base_model")
     train_path = config.get_data_path("neighborhood_clf.train")
     dev_path = config.get_data_path("neighborhood_clf.dev")
     test_path = config.get_data_path("neighborhood_clf.test")
-    train, dev, test = ops.split(in_path, train_path, dev_path, test_path)
+    train, dev, test = ops.split(in_path, model, train_path, dev_path, test_path)
     yield dg_standard_doc(train, asset_key=split_train_key)
     yield dg_standard_doc(dev, asset_key=split_dev_key)
     yield dg_standard_doc(test, asset_key=split_test_key)
 
-crosses_train_key = dg.AssetKey([PREFIX, "crosses_train"])
-crosses_dev_key = dg.AssetKey([PREFIX, "crosses_dev"])
-crosses_test_key = dg.AssetKey([PREFIX, "crosses_test"])
 
 @dg_asset(deps=[dg.AssetKey(["geoms", "block_labels"]),
                 dg.AssetKey(["geoms","neighborhood_labels"])],
@@ -101,23 +118,15 @@ def init_model():
     ops.init_model(base_cfg, full_cfg, out_path, blocks_path, neighborhood_path)
 
 
-@dg_asset(deps=[crosses_train_key, crosses_dev_key, init_model])
-def train_synthetic():
-    train_path = config.get_data_path("neighborhood_clf.crosses_train")
-    dev_path = config.get_data_path("neighborhood_clf.crosses_dev")
-    full_cfg = config.get_file_path("neighborhood_clf.full_cfg")
-    out_path = config.get_file_path("neighborhood_clf.trained_model")
-    metrics = ops.train(full_cfg, train_path, dev_path, out_path)
-    return dg.MaterializeResult(metadata=metrics)
-
-
-@dg_asset(deps=[split_train_key, split_dev_key, train_synthetic])
+@dg_asset(deps=[split_train_key, split_dev_key, init_model])
 def train():
     train_path = config.get_data_path("neighborhood_clf.train")
     dev_path = config.get_data_path("neighborhood_clf.dev")
     full_cfg = config.get_file_path("neighborhood_clf.full_cfg")
+    block_labels = config.get_data_path("geoms.block_labels")
+    comm_labels = config.get_data_path("geoms.neighborhood_labels")
     out_path = config.get_file_path("neighborhood_clf.trained_model")
-    metrics = ops.train(full_cfg, train_path, dev_path, out_path)
+    metrics = ops.train(full_cfg, train_path, dev_path, block_labels, comm_labels, out_path)
     return dg.MaterializeResult(metadata=metrics)
 
 # @dg_asset(deps=[prev, init_model],
@@ -135,11 +144,13 @@ def inference():
 defs = dg.Definitions(assets=[
     synthetic_data,
     geocodes,
-    pre_annotate,
+    ner_labels,
+    merge_synth_data,
+    # pre_annotate,
     split,
 #   annotate_train,
 #   annotate_dev,
     init_model,
-    train_synthetic,
+    # train_synthetic,
     train,
     inference])
