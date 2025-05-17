@@ -20,15 +20,6 @@ dg_asset_out = partial(dg.AssetOut, key_prefix=[PREFIX], group_name=PREFIX)
 #     ops.join_sentences(in_path, model, out_path)
 
 
-@dg_asset(deps = [dg.AssetKey(["geoms","intersection_labels"])],
-          description="Create synthetic labels from known intersection shapefile")
-def synthetic_data():
-    intersections_path = config.get_data_path("geoms.intersection_labels")
-    out_path = config.get_data_path("neighborhood_clf.crosses")
-    df = ops.synthetic_data(intersections_path, out_path)
-    return dg_standard_doc(df)
-
-
 @dg_asset(deps=dg.AssetKey(["prior_model","geocodes"]))
 def geocodes():
     in_path = config.get_data_path("prior_model.geocodes")
@@ -49,6 +40,7 @@ def ner_labels():
     df = ops.ner_labels(in_path, model, block_labels, cross_labels, out_path)
     return dg_standard_table(df)
 
+
 @dg_asset(deps = [dg.AssetKey(["geoms","intersection_labels"]), 
                   geocodes, 
                   ner_labels],
@@ -58,8 +50,9 @@ def merge_synth_data():
     geo_path = config.get_data_path("neighborhood_clf.geocodes")
     ner_path = config.get_data_path("neighborhood_clf.ner_labels")
     model = config.get_param("neighborhood_clf.base_model")
+    k = config.get_param("neighborhood_clf.k_train")
     out_path = config.get_data_path("neighborhood_clf.synth_data")
-    df = ops.merge_synth_data(cross_path, geo_path, ner_path, model, out_path)
+    df = ops.merge_synth_data(cross_path, geo_path, ner_path, model, k, out_path)
     return dg_standard_table(df)
 
 # @dg_asset(deps=[dg.AssetKey(["entity_recognition", "inference"])], 
@@ -105,52 +98,45 @@ def split():
     yield dg_standard_doc(test, asset_key=split_test_key)
 
 
-@dg_asset(deps=[dg.AssetKey(["geoms", "block_labels"]),
-                dg.AssetKey(["geoms","neighborhood_labels"])],
-          description="Train article relevance classifier")
-def init_model():
-    blocks_path = config.get_data_path("geoms.block_labels")
-    neighborhood_path = config.get_data_path("geoms.neighborhood_labels")
-    base_cfg = config.get_file_path("neighborhood_clf.base_cfg")
-    full_cfg = config.get_file_path("neighborhood_clf.full_cfg")
-    out_path = config.get_file_path("neighborhood_clf.trained_model")
-    out_path = os.path.join(out_path, "model-best")
-    ops.init_model(base_cfg, full_cfg, out_path, blocks_path, neighborhood_path)
-
-
-@dg_asset(deps=[split_train_key, split_dev_key, init_model])
+@dg_asset(deps=[split_train_key, split_dev_key])
 def train():
     train_path = config.get_data_path("neighborhood_clf.train")
     dev_path = config.get_data_path("neighborhood_clf.dev")
+    base_cfg = config.get_file_path("neighborhood_clf.base_cfg")
     full_cfg = config.get_file_path("neighborhood_clf.full_cfg")
     block_labels = config.get_data_path("geoms.block_labels")
     comm_labels = config.get_data_path("geoms.neighborhood_labels")
     out_path = config.get_file_path("neighborhood_clf.trained_model")
-    metrics = ops.train(full_cfg, train_path, dev_path, block_labels, comm_labels, out_path)
+    metrics = ops.train(base_cfg, full_cfg, train_path, dev_path, block_labels, comm_labels, out_path)
     return dg.MaterializeResult(metadata=metrics)
 
-# @dg_asset(deps=[prev, init_model],
-#           description="Pass original data through ml model")
-@dg_asset(deps=[split_train_key, init_model],
+
+@dg_asset(deps=[split_test_key, train])
+def evaluate():
+    test_path = config.get_data_path("neighborhood_clf.test")
+    model = config.get_file_path("neighborhood_clf.trained_model")
+    model = os.path.join(model, "model-best")
+    out_data = config.get_data_path("neighborhood_clf.eval_data")
+    out_metrics = config.get_data_path("neighborhood_clf.eval_metrics")
+    ops.evaluate(model, test_path, out_metrics, out_data)
+
+
+@dg_asset(deps=[dg.AssetKey(["entity_recognition","inference"]), train],
           description="Pass original data through ml model")
 def inference():
     in_data_path = config.get_data_path("entity_recognition.inference")
     out_data_path = config.get_data_path("neighborhood_clf.inference")
     model_path = config.get_file_path("neighborhood_clf.trained_model")
     best_model_path = os.path.join(model_path, "model-best")
-    docs = ops.inference(best_model_path, in_data_path, out_data_path)
+    docs = ops.inference(in_data_path, best_model_path, out_data_path)
     return dg_standard_doc(docs)
 
+
 defs = dg.Definitions(assets=[
-    synthetic_data,
     geocodes,
     ner_labels,
     merge_synth_data,
-    # pre_annotate,
     split,
-#   annotate_train,
-#   annotate_dev,
-    init_model,
-    # train_synthetic,
     train,
+    evaluate,
     inference])

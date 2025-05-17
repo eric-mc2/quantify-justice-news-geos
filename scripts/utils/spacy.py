@@ -41,6 +41,19 @@ def train(train_path, dev_path, full_cfg, model_path, overrides: dict[str,Any] =
         command += f" --{key} {val}"
     cmd(command, "Training time: {:.1f}s")
 
+def evaluate(model_path, test_path, out_metrics, out_data, overrides: dict[str,Any] = {}):
+    command = f"""python -m spacy benchmark accuracy
+                {model_path} {test_path} --output {out_metrics}"""
+    for key,val in overrides.items():
+        command += f" --{key} {val}"
+    cmd(command, "Eval time: {:.1f}s")
+
+    command = f"""python -m spacy apply
+                {model_path} {test_path} {out_data} --force"""
+    for key,val in overrides.items():
+        command += f" --{key} {val}"
+    cmd(command, "Eval time: {:.1f}s")
+
 def assemble(full_cfg, model_path, overrides: dict[str,Any] = {}):
     command = f"""python -m spacy assemble {full_cfg} {model_path}"""
     for key,val in overrides.items():

@@ -5,17 +5,16 @@ import os
 import spacy
 from spacy.tokens import DocBin, Doc
 from spacy.cli import apply as spacy_infer
-from thinc.api import Config
+from spacy.language import Language
 import srsly
 
 from scripts.utils import preprocessing as pre
+from scripts.neighborhood_clf.components import make_nclf, cat_merger
 from scripts.utils.logging import setup_logger
-from scripts.utils.labelstudio import extract as extract_ls
-from scripts.utils.spacy import (load_spacy, 
-                                 init_config, 
+from scripts.utils.spacy import (init_config, 
                                  load_metrics,
                                  train as train_spacy,
-                                 assemble)
+                                 evaluate as eval_spacy)
 
 logger = setup_logger(__name__)
 
@@ -92,74 +91,54 @@ def ner_labels(in_path, base_model, block_path, cross_path, out_path):
     out_data = []
     for e in ents:
         if e._.gpe_shape == "community":
-            out_data.append({"text": e.text, "community_name": e.text})
+            out_data.append({"text": e.text, "community_name": e.text, "gpe_shape": e._.gpe_shape})
         elif e._.gpe_shape == "block":
             if e.text not in blocks:
                 continue
             for comm in blocks[e.text]:
-                out_data.append({"text": e.text, "community_name": comm})
+                out_data.append({"text": e.text, "community_name": comm, "gpe_shape": e._.gpe_shape})
         elif e._.gpe_shape == "cross":
             if e.text not in crosses:
                 continue
             for comm in crosses[e.text]:
-                out_data.append({"text": e.text, "community_name": comm})
+                out_data.append({"text": e.text, "community_name": comm, "gpe_shape": e._.gpe_shape})
     out_data = pd.DataFrame.from_records(out_data)
     out_data.to_parquet(out_path)
     return out_data
 
 
-def merge_synth_data(cross_path, geo_path, ner_path, base_model, out_path):
+def merge_synth_data(cross_path, geo_path, ner_path, base_model, k_train, out_path):
     crosses = pd.read_parquet(cross_path).rename(columns={"cross_name":"text"})
     geos = pd.read_parquet(geo_path)
     ners = pd.read_parquet(ner_path)
     cols = ['text','community_name']
-    k = min(len(crosses), len(geos), len(ners), 1000)
+    k = min(len(crosses), len(geos), len(ners), k_train)
     data = pd.concat([crosses.filter(cols).sample(k),
                       geos.filter(cols).sample(k),
-                      ners.filter(cols).sample(k)])
-    db = DocBin()
+                      ners.filter(cols + ['gpe_shape']).sample(k)])
     model = spacy.load(base_model)
-    data_iter = zip(data['text'],data['community_name'])
-    for doc,label in model.pipe(data_iter, as_tuples=True, batch_size=64):
-        doc.cats[label] = 1
-        db.add(doc)
+    db = _to_docbin(data, model, "text", ["community_name"], ["gpe_shape"])
     db.to_disk(out_path)
     return data
 
+def _to_docbin(df: pd.DataFrame, model, text_col="text", cats=[], user_data=[]):
+    db = DocBin(store_user_data=True)
+    ctx = df.drop(columns=text_col)
+    data_iter = zip(df[text_col], ctx.itertuples())
+    for doc, ctx in model.pipe(data_iter, as_tuples=True, batch_size=64):
+        for cat in filter(lambda c: c in ctx._fields, cats):
+            doc.cats[getattr(ctx, cat)] = 1
+        for dat in filter(lambda d: d in ctx._fields, user_data):
+            doc.user_data[dat] = getattr(ctx, dat)
+        db.add(doc)
+    return db
+    
 
 def pre_annotate(in_path, base_model, out_path):
     ents = pre_inference(in_path, base_model)
     ents = [{'text': e.text, "gpe_shape": e._.gpe_shape} for e in ents]
     srsly.write_json(out_path, ents)
     return pd.DataFrame.from_records(ents)
-
-# def synthetic_data(intersections_path, out_path, k=100000):
-#     crosses = pd.read_parquet(intersections_path).rename(columns={'cross_name':'name'})
-#     crosses = crosses.sample(n=min(k, len(crosses)))
-#     model = spacy.blank("en")
-
-#     def _to_docs(df):
-#         docs = []
-#         inputs = zip(df['name'], df['community_name'])
-#         status = 0
-#         for i, (doc, label) in enumerate(model.pipe(inputs, as_tuples=True, batch_size=256)):
-#             new_status = (100 * i) // len(df)
-#             if new_status % 5 == 0 and new_status > status:
-#                 logger.debug("Piped %d percent of rows", new_status)
-#                 status = new_status
-#             doc.cats[label] = 1
-#             docs.append(doc)
-#         return docs
-    
-#     def _to_docbin(docs, path):
-#         db = DocBin()
-#         for doc in docs:
-#             db.add(doc)
-#         db.to_disk(path)
-
-#     crosses = _to_docs(crosses)
-#     _to_docbin(crosses, out_path)
-#     return crosses
 
 
 def geocodes(in_path, out_path):
@@ -182,16 +161,24 @@ def geocodes(in_path, out_path):
     return labels
 
 
-def train(full_cfg, train_path, dev_path, blocks_path, neighborhood_path, out_path, overrides={}):
+def train(base_cfg, full_cfg, train_path, dev_path, blocks_path, neighborhood_path, out_path, overrides={}):
     code_path = os.path.join(os.path.dirname(__file__), "components.py")
     overrides |= {"code": code_path,
-                  "initialize.components.nclf.blocks_path": blocks_path,
                   "initialize.components.nclf.neighborhood_path": neighborhood_path,
-    }
-                      
+                  "initialize.components.nclf.blocks_path": blocks_path}
+
+    init_config(base_cfg, full_cfg, code_path)
+    # assemble(full_cfg, out_path, overrides)                      
     train_spacy(train_path, dev_path, full_cfg, out_path, overrides)
     metrics = load_metrics(out_path)
     return metrics
+
+def evaluate(model_path, in_path, out_metrics, out_data, overrides = {}):
+    code_path = os.path.join(os.path.dirname(__file__), "components.py")
+    overrides |= {"code": code_path}
+                #   "initialize.components.nclf.neighborhood_path": neighborhood_path,
+                #   "initialize.components.nclf.blocks_path": blocks_path}
+    eval_spacy(model_path, in_path, out_metrics, out_data, overrides)
     
 # def annotate(in_path, out_path):
 #     data = extract_ls(in_path)
@@ -201,23 +188,10 @@ def train(full_cfg, train_path, dev_path, blocks_path, neighborhood_path, out_pa
 #     data.to_json(out_path, lines=True, orient="records", index=False)
 #     return data
 
-def init_model(base_cfg, 
-          full_cfg, 
-          out_path, 
-          blocks_path,
-          neighborhood_path,
-          overrides = {}):
-    
-    code_path = os.path.join(os.path.dirname(__file__), "components.py")
-    overrides |= {"code": code_path,
-                  "initialize.components.nclf.neighborhood_path": neighborhood_path,
-                  "initialize.components.nclf.blocks_path": blocks_path}
-    logger.debug("init config...")
-    init_config(base_cfg, full_cfg, code_path)
-    logger.debug("train...")
-    assemble(full_cfg, out_path, overrides)
 
 def inference(in_path, model_path, out_path):
-    spacy_infer(Path(in_path), Path(out_path), model_path, None, 1, 1)
+    Language.component('cat_merger', func=cat_merger)
+    Language.factory("nclf", func=make_nclf)
+    spacy_infer(Path(in_path), Path(out_path), model_path, None, 64, 1)
     docs = list(DocBin().from_disk(out_path).get_docs(spacy.load(model_path).vocab))
     return docs
