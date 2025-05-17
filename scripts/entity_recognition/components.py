@@ -9,7 +9,6 @@ from spacy.util import filter_spans, ensure_path
 from spacy.language import Language
 from spacy.matcher.phrasematcher import PhraseMatcher
 from spacy.matcher.matcher import Matcher
-import srsly
 
 from scripts.geoms.operations import sides
 from scripts.utils.logging import setup_logger
@@ -283,17 +282,7 @@ def apply_ents(doc: Doc, new_ents: list[Span], component_name: str, gpe_shape: s
 
 @Language.component("block_matcher")
 def block_matcher(doc: Doc):
-    # TODO: This sees to not be working. Though NER seems to be making block matches so i'm confused.
     new_ents = []
-    # for idx, ent in enumerate(doc.ents):
-    #     if ent.label_ == "FAC" and ent.start >= 3 and idx >= 1:
-    #         prev_ent = list(doc.ents)[idx-1]
-    #         prev_tokens = doc[ent.start - 3: ent.start]
-    #         # Must match [CARDINAL] block of [FAC]
-    #         if (prev_tokens[2].text == "of" and prev_tokens[1].text == "block"
-    #             and prev_ent.label_ == "CARDINAL" and prev_tokens[0].text == prev_ent.text):
-    #             new_ent = Span(doc, ent.start - 3, ent.end, label=ent.label)
-    #             new_ents.append(new_ent)
     for idx, ent in enumerate(doc._.ents):
         if ent.label_ == "FAC" and ent.start >= 3:
             prev_tokens = doc[ent.start - 3: ent.start]

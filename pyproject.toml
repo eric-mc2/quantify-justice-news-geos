@@ -35,8 +35,8 @@ ipywidgets = "^8.1.5"
 overpass = "^0.7.2"
 pyahocorasick = "^2.1.0"
 
-[tool.dg]
-is_project = true
+[tool.dagster]
+module_name = "scripts.definitions"
 
 [project.scripts]
 dagster-dev = 'scripts.utils.dagster:dagster_dev'

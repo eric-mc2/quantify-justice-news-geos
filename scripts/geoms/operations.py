@@ -233,6 +233,7 @@ def neighborhood_labels(in_file, comm_area_file, out_file) -> pd.DataFrame:
                     how='left', predicate='intersects')
     touches = df.sjoin(comm_areas[['community_name','geometry']],
                     how='left', predicate='touches')
+    # TODO: Normalize this so multi-communities sum to 1!
     df = intersection.merge(touches, on=['name','community_name'], how='left', indicator='_mask')
     df = df.loc[df['_mask'] == 'left_only']
     df = df.filter(['name','community_name'])
@@ -240,6 +241,7 @@ def neighborhood_labels(in_file, comm_area_file, out_file) -> pd.DataFrame:
     return df
     
 def block_labels(street_block_file, comm_area_file, out_file):
+    # TODO: Normalize this so multi blocks sum to 1!
     df = gpd.read_parquet(street_block_file).to_crs(NAD_27_ILLINOIS_EAST)
     comm_areas = gpd.read_parquet(comm_area_file).to_crs(NAD_27_ILLINOIS_EAST)
     
@@ -313,6 +315,7 @@ def create_intersection_geoms(in_file, out_file):
     return crosses
 
 def intersection_labels(street_intersection_file, comm_area_file, out_file):
+    # TODO: Normalize this too!
     df = gpd.read_parquet(street_intersection_file).to_crs(NAD_27_ILLINOIS_EAST)
     comm_areas = gpd.read_parquet(comm_area_file).to_crs(NAD_27_ILLINOIS_EAST)
     
